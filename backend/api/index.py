@@ -274,10 +274,13 @@ async def db(method: str, path: str, **kwargs) -> httpx.Response:
     """Talk to Supabase's REST API with the service key."""
     headers = {
         "apikey": SUPABASE_SERVICE_KEY,
-        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
         "Content-Type": "application/json",
         "Prefer": "return=representation",
     }
+    # The older service_role key is a long token starting with "eyJ" and also goes in the Authorization header.
+    # The newer secret key (starts with "sb_secret_") is not that kind of token and must go in "apikey" only.
+    if not SUPABASE_SERVICE_KEY.startswith("sb_"):
+        headers["Authorization"] = f"Bearer {SUPABASE_SERVICE_KEY}"
     async with httpx.AsyncClient(timeout=20) as client:
         return await client.request(method, f"{SUPABASE_URL}/rest/v1/{path}", headers=headers, **kwargs)
 
