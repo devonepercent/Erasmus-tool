@@ -1,0 +1,27 @@
+{
+  "name": "Test Student",
+  "email": "you@example.com",
+  "whatsapp": "+919999999999",
+  "cgpa": "8.1",
+  "target_intake": "September 2027",
+  "programmes": [
+    "Data Science"
+  ],
+  "english_score": "IELTS 7.0 and above",
+  "has_cv": false,
+  "college": "NIT Calicut",
+  "has_experience": true,
+  "experience": [
+    {
+      "title": "Data Analyst Intern",
+      "years": "Under 1 year"
+    }
+  ],
+  "research": [
+    "Final year project"
+  ],
+  "extracurricular": [
+    "Volunteering"
+  ],
+  "leaderboard_consent": false
+}
