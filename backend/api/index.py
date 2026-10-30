@@ -44,6 +44,9 @@ HIGH_INTENT_PCT = int(os.environ.get("HIGH_INTENT_PCT", "60"))
 RATE_LIMIT_PER_HOUR = int(os.environ.get("RATE_LIMIT_PER_HOUR", "12"))
 ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "*").split(",") if o.strip()]
 MAX_CV_BYTES = 4 * 1024 * 1024  # Vercel rejects request bodies above about 4.5 MB
+# Two caps that keep the Claude cost of one student check under about Rs 1.4 on Sonnet 5.5:
+MAX_OUTPUT_TOKENS = int(os.environ.get("MAX_OUTPUT_TOKENS", "900"))   # the reply is normally about 500 tokens
+CV_CHAR_LIMIT = int(os.environ.get("CV_CHAR_LIMIT", "8000"))          # about 2,000 tokens of CV text
 
 PROMPT = (Path(__file__).parent / "scoring_prompt.txt").read_text(encoding="utf-8")
 
@@ -150,11 +153,11 @@ def read_cv(upload: UploadFile) -> str:
             from pypdf import PdfReader
 
             reader = PdfReader(io.BytesIO(data))
-            return "\n".join((p.extract_text() or "") for p in reader.pages)[:15000].strip()
+            return "\n".join((p.extract_text() or "") for p in reader.pages)[:CV_CHAR_LIMIT].strip()
         import docx
 
         d = docx.Document(io.BytesIO(data))
-        return "\n".join(p.text for p in d.paragraphs)[:15000].strip()
+        return "\n".join(p.text for p in d.paragraphs)[:CV_CHAR_LIMIT].strip()
     except Exception as e:  # noqa: BLE001
         print("CV read failed:", repr(e))
         return ""
@@ -197,7 +200,7 @@ async def ask_claude(profile: dict, cv_text: str) -> dict:
                 r = await client.post(
                     "https://api.anthropic.com/v1/messages",
                     headers={"x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-                    json={"model": CLAUDE_MODEL, "max_tokens": 2000, "system": PROMPT, "messages": [{"role": "user", "content": user_msg}]},
+                    json={"model": CLAUDE_MODEL, "max_tokens": MAX_OUTPUT_TOKENS, "system": PROMPT, "messages": [{"role": "user", "content": user_msg}]},
                 )
             except httpx.HTTPError as e:
                 last_problem = f"network: {e!r}"
@@ -210,7 +213,11 @@ async def ask_claude(profile: dict, cv_text: str) -> dict:
             if r.status_code != 200:
                 print("Claude error", r.status_code, r.text[:300])
                 raise HTTPException(502, "Scoring failed. Please try again.")
-            text = "".join(b.get("text", "") for b in r.json().get("content", []) if b.get("type") == "text")
+            body = r.json()
+            if body.get("stop_reason") == "max_tokens":  # the reply was cut off, so the JSON is incomplete
+                last_problem = "cut off"
+                continue
+            text = "".join(b.get("text", "") for b in body.get("content", []) if b.get("type") == "text")
             data = extract_json(text)
             if isinstance(data, dict):
                 return data
