@@ -3,7 +3,7 @@ EM Chance Checker backend
 -------------------------
 One small server:
   GET  /api/health          is the server up, and which settings are filled in (add ?deep=1 to test each service)
-  POST /api/chance          form (+ optional CV) -> score, saves the lead, emails the report
+  POST /api/chance          form (+ optional CV) -> score, saves the lead, emails the report (Resend, or Gmail)
   GET  /api/leaderboard     last 7 days, only students who agreed to appear
   POST /api/report/email    re-send the report email for a lead
   GET  /api/share           share text + link for a lead
@@ -38,6 +38,9 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 GMAIL_USER = os.environ.get("GMAIL_USER", "")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "").replace(" ", "")
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+EMAIL_FROM = os.environ.get("EMAIL_FROM", "")          # e.g. 1% Abroad <reports@onepercentabroad.com>
+EMAIL_REPLY_TO = os.environ.get("EMAIL_REPLY_TO", "")  # where student replies should go (optional)
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://onepercentabroad.com/chance")
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-5-5")
 HIGH_INTENT_PCT = int(os.environ.get("HIGH_INTENT_PCT", "60"))
@@ -307,10 +310,15 @@ async def get_lead(lead_id: str) -> dict:
     return rows[0]
 
 
-def send_report_email(lead: dict) -> bool:
-    """Plain-text report email via Gmail. Returns True if it was sent."""
-    if not (GMAIL_USER and GMAIL_APP_PASSWORD and lead.get("email")):
-        return False
+def email_service() -> str:
+    if RESEND_API_KEY:
+        return "resend"
+    if GMAIL_USER and GMAIL_APP_PASSWORD:
+        return "gmail"
+    return "none"
+
+
+def build_report(lead: dict):
     gaps = lead.get("gaps") or []
     progs = lead.get("programme_matches") or []
     lines = [
@@ -337,11 +345,36 @@ def send_report_email(lead: dict) -> bool:
         "",
         "1% Abroad, Calicut",
     ]
+    return f"Your Erasmus Mundus chance: {lead.get('admission_pct')}%", "\n".join(lines)
+
+
+def send_via_resend(to: str, subject: str, text: str) -> bool:
+    payload = {"from": EMAIL_FROM or "1% Abroad <onboarding@resend.dev>", "to": [to], "subject": subject, "text": text}
+    if EMAIL_REPLY_TO:
+        payload["reply_to"] = [EMAIL_REPLY_TO]
+    try:
+        r = httpx.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
+            json=payload,
+            timeout=15,
+        )
+        if r.status_code in (200, 201, 202) and r.json().get("id"):
+            return True
+        print("Resend failed:", r.status_code, r.text[:300])
+    except Exception as e:  # noqa: BLE001
+        print("Resend error:", repr(e))
+    return False
+
+
+def send_via_gmail(to: str, subject: str, text: str) -> bool:
     msg = MIMEMultipart()
     msg["From"] = GMAIL_USER
-    msg["To"] = lead["email"]
-    msg["Subject"] = f"Your Erasmus Mundus chance: {lead.get('admission_pct')}%"
-    msg.attach(MIMEText("\n".join(lines), "plain", "utf-8"))
+    msg["To"] = to
+    msg["Subject"] = subject
+    if EMAIL_REPLY_TO:
+        msg["Reply-To"] = EMAIL_REPLY_TO
+    msg.attach(MIMEText(text, "plain", "utf-8"))
     try:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=15) as s:
             s.login(GMAIL_USER, GMAIL_APP_PASSWORD)
@@ -352,22 +385,34 @@ def send_report_email(lead: dict) -> bool:
         return False
 
 
+def send_report_email(lead: dict) -> bool:
+    """Send the plain-text report. Uses Resend if RESEND_API_KEY is set, otherwise Gmail. Returns True if sent."""
+    if not lead.get("email"):
+        return False
+    subject, text = build_report(lead)
+    service = email_service()
+    if service == "resend":
+        return send_via_resend(lead["email"], subject, text)
+    if service == "gmail":
+        return send_via_gmail(lead["email"], subject, text)
+    return False
+
+
 # ---------- endpoints ----------
 @app.get("/")
 @app.get("/api/health")
 async def health(request: Request, deep: int = 0):
-    out = {
-        "ok": True,
-        "service": "EM Chance Checker API",
-        "model": CLAUDE_MODEL,
-        "settings_filled_in": {
-            "ANTHROPIC_API_KEY": bool(ANTHROPIC_API_KEY),
-            "SUPABASE_URL": bool(SUPABASE_URL),
-            "SUPABASE_SERVICE_KEY": bool(SUPABASE_SERVICE_KEY),
-            "GMAIL_USER": bool(GMAIL_USER),
-            "GMAIL_APP_PASSWORD": bool(GMAIL_APP_PASSWORD),
-        },
+    service = email_service()
+    settings = {
+        "ANTHROPIC_API_KEY": bool(ANTHROPIC_API_KEY),
+        "SUPABASE_URL": bool(SUPABASE_URL),
+        "SUPABASE_SERVICE_KEY": bool(SUPABASE_SERVICE_KEY),
     }
+    if service == "gmail":
+        settings.update({"GMAIL_USER": bool(GMAIL_USER), "GMAIL_APP_PASSWORD": bool(GMAIL_APP_PASSWORD)})
+    else:
+        settings.update({"RESEND_API_KEY": bool(RESEND_API_KEY), "EMAIL_FROM": bool(EMAIL_FROM)})
+    out = {"ok": True, "service": "EM Chance Checker API", "model": CLAUDE_MODEL, "email_service": service, "settings_filled_in": settings}
     if deep:
         rate_limit(request)
         checks = {}
@@ -388,18 +433,43 @@ async def health(request: Request, deep: int = 0):
             checks["claude"] = "ok" if r.status_code == 200 else f"problem ({r.status_code}): {r.text[:160]}"
         except Exception as e:  # noqa: BLE001
             checks["claude"] = f"problem: {e!r}"[:160]
-        # Gmail: can we log in? (nothing is sent)
-        def _gmail():
-            with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=15) as s:
-                s.login(GMAIL_USER, GMAIL_APP_PASSWORD)
+        # Email: is the key valid and the sending domain verified? (nothing is sent)
+        if service == "resend":
+            m = re.search(r"@([^>\s]+)", EMAIL_FROM or "")
+            dom = m.group(1).lower() if m else ""
+            try:
+                async with httpx.AsyncClient(timeout=20) as client:
+                    r = await client.get("https://api.resend.com/domains", headers={"Authorization": f"Bearer {RESEND_API_KEY}"})
+                if not EMAIL_FROM:
+                    checks["email_resend"] = "problem: add EMAIL_FROM, for example 1% Abroad <reports@yourdomain.com>"
+                elif r.status_code == 200:
+                    found = {(d.get("name") or "").lower(): d.get("status") for d in (r.json().get("data") or [])}
+                    if found.get(dom) == "verified":
+                        checks["email_resend"] = "ok"
+                    elif dom in found:
+                        checks["email_resend"] = f"problem: {dom} is not verified yet in Resend (status: {found[dom]})"
+                    else:
+                        checks["email_resend"] = f"problem: {dom} is not added in Resend > Domains"
+                elif r.status_code in (401, 403) and "restricted" in r.text.lower():
+                    checks["email_resend"] = "ok (sending-only key, so the domain was not checked here; send one test report)"
+                else:
+                    checks["email_resend"] = f"problem ({r.status_code}): {r.text[:120]}"
+            except Exception as e:  # noqa: BLE001
+                checks["email_resend"] = f"problem: {e!r}"[:160]
+        elif service == "gmail":
+            def _gmail():
+                with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=15) as s:
+                    s.login(GMAIL_USER, GMAIL_APP_PASSWORD)
 
-        try:
-            await asyncio.to_thread(_gmail)
-            checks["gmail_login"] = "ok"
-        except Exception as e:  # noqa: BLE001
-            checks["gmail_login"] = f"problem: {e!r}"[:160]
+            try:
+                await asyncio.to_thread(_gmail)
+                checks["email_gmail"] = "ok"
+            except Exception as e:  # noqa: BLE001
+                checks["email_gmail"] = f"problem: {e!r}"[:160]
+        else:
+            checks["email"] = "problem: no email service set. Add RESEND_API_KEY and EMAIL_FROM"
         out["checks"] = checks
-        out["ok"] = all(v == "ok" for v in checks.values())
+        out["ok"] = all(str(v).startswith("ok") for v in checks.values())
     return out
 
 
