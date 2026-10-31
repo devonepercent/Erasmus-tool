@@ -43,6 +43,10 @@ EMAIL_FROM = os.environ.get("EMAIL_FROM", "")          # e.g. 1% Abroad <reports
 EMAIL_REPLY_TO = os.environ.get("EMAIL_REPLY_TO", "")  # where student replies should go (optional)
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://onepercentabroad.com/chance")
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-5-5")
+# Sonnet 5.5 thinks before answering unless told not to. That thinking is billed and counts toward the reply limit.
+# "between_tools" turns off up-front thinking (we use no tools, so there is none); "low" effort keeps it brief.
+CLAUDE_THINKING = os.environ.get("CLAUDE_THINKING", "between_tools")   # set to "default" to let the model decide
+CLAUDE_EFFORT = os.environ.get("CLAUDE_EFFORT", "low")                 # set to "default" to use the model's own default
 HIGH_INTENT_PCT = int(os.environ.get("HIGH_INTENT_PCT", "60"))
 RATE_LIMIT_PER_HOUR = int(os.environ.get("RATE_LIMIT_PER_HOUR", "12"))
 ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "*").split(",") if o.strip()]
@@ -183,6 +187,24 @@ def extract_json(text: str):
     return None
 
 
+def claude_body(messages: list, max_tokens: int, system: str = "", lean: bool = True) -> dict:
+    body = {"model": CLAUDE_MODEL, "max_tokens": max_tokens, "messages": messages}
+    if system:
+        body["system"] = system
+    if lean:
+        if CLAUDE_THINKING and CLAUDE_THINKING != "default":
+            body["thinking"] = {"type": CLAUDE_THINKING}
+        if CLAUDE_EFFORT and CLAUDE_EFFORT != "default":
+            body["output_config"] = {"effort": CLAUDE_EFFORT}
+    return body
+
+
+def lean_rejected(r) -> bool:
+    """True if Claude refused our thinking/effort settings (for example on a different model)."""
+    t = r.text.lower()
+    return r.status_code == 400 and any(w in t for w in ("thinking", "effort", "output_config"))
+
+
 async def ask_claude(profile: dict, cv_text: str) -> dict:
     """Send the profile (and CV text) to Claude and get the scored result back as JSON. Tries twice."""
     if not ANTHROPIC_API_KEY:
@@ -197,17 +219,23 @@ async def ask_claude(profile: dict, cv_text: str) -> dict:
     user_msg += "\n\nReturn ONLY the JSON object described in your instructions."
 
     last_problem = "unknown"
+    lean, tries = True, 0
     async with httpx.AsyncClient(timeout=50) as client:
-        for attempt in (1, 2):
+        while tries < 2:
+            tries += 1
             try:
                 r = await client.post(
                     "https://api.anthropic.com/v1/messages",
                     headers={"x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-                    json={"model": CLAUDE_MODEL, "max_tokens": MAX_OUTPUT_TOKENS, "system": PROMPT, "messages": [{"role": "user", "content": user_msg}]},
+                    json=claude_body([{"role": "user", "content": user_msg}], MAX_OUTPUT_TOKENS, PROMPT, lean),
                 )
             except httpx.HTTPError as e:
                 last_problem = f"network: {e!r}"
                 await asyncio.sleep(1)
+                continue
+            if lean and lean_rejected(r):
+                print("Claude did not accept the thinking/effort settings, trying without them:", r.text[:200])
+                lean, tries = False, tries - 1
                 continue
             if r.status_code in (429, 500, 502, 503, 529):
                 last_problem = f"busy {r.status_code}"
@@ -217,6 +245,7 @@ async def ask_claude(profile: dict, cv_text: str) -> dict:
                 print("Claude error", r.status_code, r.text[:300])
                 raise HTTPException(502, "Scoring failed. Please try again.")
             body = r.json()
+            print("Claude usage:", body.get("usage"), "| stop:", body.get("stop_reason"))  # tokens per check, for cost tracking
             if body.get("stop_reason") == "max_tokens":  # the reply was cut off, so the JSON is incomplete
                 last_problem = "cut off"
                 continue
@@ -428,9 +457,12 @@ async def health(request: Request, deep: int = 0):
                 r = await client.post(
                     "https://api.anthropic.com/v1/messages",
                     headers={"x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-                    json={"model": CLAUDE_MODEL, "max_tokens": 5, "messages": [{"role": "user", "content": "Say ok"}]},
+                    json=claude_body([{"role": "user", "content": "Reply with the single word ok"}], 50),
                 )
-            checks["claude"] = "ok" if r.status_code == 200 else f"problem ({r.status_code}): {r.text[:160]}"
+            if r.status_code == 200:
+                checks["claude"] = "ok" if r.json().get("stop_reason") != "max_tokens" else "problem: the reply was cut off (thinking may be on)"
+            else:
+                checks["claude"] = f"problem ({r.status_code}): {r.text[:160]}"
         except Exception as e:  # noqa: BLE001
             checks["claude"] = f"problem: {e!r}"[:160]
         # Email: is the key valid and the sending domain verified? (nothing is sent)
