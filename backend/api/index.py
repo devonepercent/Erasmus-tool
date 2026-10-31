@@ -275,9 +275,9 @@ def normalise(r: dict) -> dict:
     gaps = []
     for g in (r.get("gaps") or [])[:3]:
         if isinstance(g, dict) and _s(g.get("title"), 90):
-            gaps.append({"title": _s(g.get("title"), 90), "reason": _s(g.get("reason"), 220), "guide_chapter": _int(g.get("guide_chapter"), 1, 20, 6)})
+            gaps.append({"title": _s(g.get("title"), 90), "reason": _s(g.get("reason"), 220), "guide_chapter": _int(g.get("guide_chapter"), 2, 5, 3)})
     while len(gaps) < 3:
-        gaps.append({"title": "Book a free call to plan your next step", "reason": "A mentor can review your profile and set your priorities.", "guide_chapter": 6})
+        gaps.append({"title": "Book a free call to plan your next step", "reason": "A mentor can review your profile and set your priorities.", "guide_chapter": 3})
 
     progs = []
     for i, p in enumerate((r.get("programmes") or [])[:5]):
