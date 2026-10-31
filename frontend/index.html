@@ -105,6 +105,9 @@ p{margin:0}
 #s-form .step{flex:none}
 #s-form .wcard>p.small{margin-bottom:14px!important}
 #s-form .wfoot{margin-top:14px}
+/* form: highlight a field that needs fixing */
+#s-form .field input.bad{border-color:#e5484d!important;box-shadow:0 0 0 3px rgba(229,72,77,.25)!important}
+
 /* live page: hide sample-only parts unless switched on in config.js; let messages wrap */
 html.no-lb .lb-link,html.no-lb #s-result .btn[onclick*="leaderboard"]{display:none!important}
 html.no-live-line .ticker{display:none!important}
@@ -1402,12 +1405,19 @@ function checkStep(){var cur=document.querySelector('#s-form .step[data-step="'+
   cur.querySelectorAll('.chips').forEach(function(g){if(g.classList.contains('sel')){var pk=g.closest('.picker');if(pk&&pk.hasAttribute('data-required')&&!SEL[pk.dataset.picker].length)ok=false;}else if(!g.querySelector('.chip.on'))ok=false});
   cur.querySelectorAll('.field input').forEach(function(i){if(!i.value.trim())ok=false});}
   var n=document.getElementById('nextBtn');n.disabled=!ok;n.classList.toggle('ready',ok);}
-function stepNext(){var last=hasCv?4:TOTAL;if(step<last){step++;if(step===5)prefillFromCv();showStep()}else{go('analysing')}}
+function stepError(msg,idx){var cur=document.querySelector('#s-form .step[data-step="'+step+'"]');var ins=cur.querySelectorAll('.field input');if(ins[idx]){ins[idx].classList.add('bad');ins[idx].focus()}toast(msg)}
+function stepValid(){var cur=document.querySelector('#s-form .step[data-step="'+step+'"]');var ins=cur.querySelectorAll('.field input');cur.querySelectorAll('.field input.bad').forEach(function(i){i.classList.remove('bad')});
+  if(step===1){if(ins[1]&&ins[1].value.replace(/\D/g,'').length<7){stepError('Please enter a valid WhatsApp number',1);return false}
+    if(ins[2]&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(ins[2].value.trim())){stepError('Please enter a valid email address',2);return false}}
+  if(step===2&&ins[0]){var v=parseFloat(String(ins[0].value).replace('%','').trim());if(!(v>0&&v<=100)){stepError('Please enter your CGPA or percentage as a number',0);return false}}
+  return true}
+document.addEventListener('input',function(e){if(e.target&&e.target.classList&&e.target.classList.contains('bad'))e.target.classList.remove('bad')});
+function stepNext(){if(!stepValid())return;var last=hasCv?4:TOTAL;if(step<last){step++;if(step===5)prefillFromCv();showStep()}else{go('analysing')}}
 function stepBack(){if(step>1){step--;showStep()}else{go('landing')}}
 function runAnalysis(){var items=document.querySelectorAll('#steps li');items.forEach(function(li){li.classList.remove('done')});
   items.forEach(function(li,i){setTimeout(function(){li.classList.add('done')},700*(i+1))});
   var minWait=new Promise(function(res){setTimeout(res,700*items.length+900)});
-  Promise.all([minWait,submitChance()]).then(function(){if(CONFIG.API_URL&&!API){go('form');step=hasCv?4:5;showStep();toast(window._lastErr||'Something went wrong. Please try again.')}else{go('result')}});}
+  Promise.all([minWait,submitChance()]).then(function(){if(CONFIG.API_URL&&!API){var em=window._lastErr||'';var to=hasCv?4:5;if(/name|email|whatsapp/i.test(em))to=1;else if(/cgpa|percentage/i.test(em))to=2;else if(/programme/i.test(em))to=3;else if(/\bcv\b/i.test(em))to=4;go('form');step=to;showStep();toast(em||'Something went wrong. Please try again.')}else{go('result')}});}
 function cls(n){return n>=60?'strong':n>=40?'avg':'weak'}
 function renderResult(){hasResult=true;var d=current();
   document.getElementById('rHead').textContent='You have a '+d.adm+'% chance of admission';
