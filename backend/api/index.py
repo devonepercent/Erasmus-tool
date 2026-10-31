@@ -13,6 +13,8 @@ Run locally:   uvicorn api.index:app --reload --port 8000     (from the backend 
 """
 
 import asyncio
+import base64
+import hmac
 import io
 import json
 import os
@@ -22,6 +24,7 @@ import time
 import uuid
 from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
+from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -29,7 +32,7 @@ from typing import Optional
 from urllib.parse import quote
 
 import httpx
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 # ---------- settings ----------
@@ -41,6 +44,11 @@ GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "").replace(" ", "")
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 EMAIL_FROM = os.environ.get("EMAIL_FROM", "")          # e.g. 1% Abroad <reports@onepercentabroad.com>
 EMAIL_REPLY_TO = os.environ.get("EMAIL_REPLY_TO", "")  # where student replies should go (optional)
+# The paid Guide: a PDF kept in a PRIVATE Supabase Storage bucket, emailed to buyers as an attachment.
+GUIDE_BUCKET = os.environ.get("GUIDE_BUCKET", "guides")
+GUIDE_FILE = os.environ.get("GUIDE_FILE", "Erasmus_Mundus_2027_Guidebook_1pctAbroad.pdf")
+GUIDE_ADMIN_KEY = os.environ.get("GUIDE_ADMIN_KEY", "")  # secret needed to send the guide (team now, payment system later)
+BOOK_CALL_URL = os.environ.get("BOOK_CALL_URL", "https://onepercentabroad.com/get-started")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://onepercentabroad.com/chance")
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-5-5")
 # Sonnet 5.5 thinks before answering unless told not to. That thinking is billed and counts toward the reply limit.
@@ -377,16 +385,18 @@ def build_report(lead: dict):
     return f"Your Erasmus Mundus chance: {lead.get('admission_pct')}%", "\n".join(lines)
 
 
-def send_via_resend(to: str, subject: str, text: str) -> bool:
+def send_via_resend(to: str, subject: str, text: str, attachments: Optional[list] = None) -> bool:
     payload = {"from": EMAIL_FROM or "1% Abroad <onboarding@resend.dev>", "to": [to], "subject": subject, "text": text}
     if EMAIL_REPLY_TO:
         payload["reply_to"] = [EMAIL_REPLY_TO]
+    if attachments:
+        payload["attachments"] = [{"filename": fn, "content": base64.b64encode(data).decode()} for fn, data in attachments]
     try:
         r = httpx.post(
             "https://api.resend.com/emails",
             headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
             json=payload,
-            timeout=15,
+            timeout=30,
         )
         if r.status_code in (200, 201, 202) and r.json().get("id"):
             return True
@@ -396,7 +406,7 @@ def send_via_resend(to: str, subject: str, text: str) -> bool:
     return False
 
 
-def send_via_gmail(to: str, subject: str, text: str) -> bool:
+def send_via_gmail(to: str, subject: str, text: str, attachments: Optional[list] = None) -> bool:
     msg = MIMEMultipart()
     msg["From"] = GMAIL_USER
     msg["To"] = to
@@ -404,8 +414,12 @@ def send_via_gmail(to: str, subject: str, text: str) -> bool:
     if EMAIL_REPLY_TO:
         msg["Reply-To"] = EMAIL_REPLY_TO
     msg.attach(MIMEText(text, "plain", "utf-8"))
+    for fn, data in attachments or []:
+        part = MIMEApplication(data, _subtype="pdf")
+        part.add_header("Content-Disposition", "attachment", filename=fn)
+        msg.attach(part)
     try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=15) as s:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as s:
             s.login(GMAIL_USER, GMAIL_APP_PASSWORD)
             s.send_message(msg)
         return True
@@ -427,6 +441,61 @@ def send_report_email(lead: dict) -> bool:
     return False
 
 
+# ---------- the Guide (paid PDF) ----------
+_guide_cache: dict = {"bytes": None}
+
+
+def storage_headers() -> dict:
+    h = {"apikey": SUPABASE_SERVICE_KEY}
+    if not SUPABASE_SERVICE_KEY.startswith("sb_"):
+        h["Authorization"] = f"Bearer {SUPABASE_SERVICE_KEY}"
+    return h
+
+
+def guide_url() -> str:
+    return f"{SUPABASE_URL}/storage/v1/object/{GUIDE_BUCKET}/{quote(GUIDE_FILE)}"
+
+
+async def fetch_guide() -> bytes:
+    """Download the guide PDF from the private bucket (kept in memory afterwards)."""
+    if _guide_cache["bytes"]:
+        return _guide_cache["bytes"]
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.get(guide_url(), headers=storage_headers())
+    if r.status_code != 200 or not r.content.startswith(b"%PDF"):
+        print("Guide download failed:", r.status_code, r.text[:200] if r.status_code != 200 else "not a PDF")
+        raise HTTPException(503, "The guide file could not be loaded. Check it is uploaded to Supabase Storage.")
+    _guide_cache["bytes"] = r.content
+    return r.content
+
+
+def build_guide_email(name: str):
+    text = "\n".join([
+        f"Hi {name},",
+        "",
+        "Thank you for buying the Erasmus Mundus Guide. Your copy is attached to this email as a PDF.",
+        "",
+        "Inside: the five habits of students who won the scholarship, where strong applicants lose it,",
+        "and an 8 step roadmap with key dates and a document checklist for the 2027 intake.",
+        "",
+        f"Want a mentor to go through your profile with you? Book a free call: {BOOK_CALL_URL}",
+        "",
+        "1% Abroad, Calicut",
+    ])
+    return "Your Erasmus Mundus Guide from 1% Abroad", text
+
+
+def send_guide_email(email: str, name: str, pdf: bytes) -> bool:
+    subject, text = build_guide_email(name)
+    files = [(GUIDE_FILE, pdf)]
+    service = email_service()
+    if service == "resend":
+        return send_via_resend(email, subject, text, files)
+    if service == "gmail":
+        return send_via_gmail(email, subject, text, files)
+    return False
+
+
 # ---------- endpoints ----------
 @app.get("/")
 @app.get("/api/health")
@@ -441,6 +510,7 @@ async def health(request: Request, deep: int = 0):
         settings.update({"GMAIL_USER": bool(GMAIL_USER), "GMAIL_APP_PASSWORD": bool(GMAIL_APP_PASSWORD)})
     else:
         settings.update({"RESEND_API_KEY": bool(RESEND_API_KEY), "EMAIL_FROM": bool(EMAIL_FROM)})
+    settings["GUIDE_ADMIN_KEY"] = bool(GUIDE_ADMIN_KEY)
     out = {"ok": True, "service": "EM Chance Checker API", "model": CLAUDE_MODEL, "email_service": service, "settings_filled_in": settings}
     if deep:
         rate_limit(request)
@@ -500,6 +570,19 @@ async def health(request: Request, deep: int = 0):
                 checks["email_gmail"] = f"problem: {e!r}"[:160]
         else:
             checks["email"] = "problem: no email service set. Add RESEND_API_KEY and EMAIL_FROM"
+        # The guide PDF: is it in the private bucket? (reads only its first bytes)
+        if GUIDE_ADMIN_KEY:
+            try:
+                async with httpx.AsyncClient(timeout=20) as client:
+                    r = await client.get(guide_url(), headers={**storage_headers(), "Range": "bytes=0-4"})
+                if r.status_code in (200, 206) and r.content.startswith(b"%PDF"):
+                    checks["guide_pdf"] = "ok"
+                else:
+                    checks["guide_pdf"] = f"problem ({r.status_code}): upload {GUIDE_FILE} to the private bucket '{GUIDE_BUCKET}' in Supabase Storage"
+            except Exception as e:  # noqa: BLE001
+                checks["guide_pdf"] = f"problem: {e!r}"[:160]
+        else:
+            checks["guide_pdf"] = "ok (guide sending not set up yet: add GUIDE_ADMIN_KEY)"
         out["checks"] = checks
         out["ok"] = all(str(v).startswith("ok") for v in checks.values())
     return out
@@ -581,6 +664,32 @@ async def leaderboard(lead_id: Optional[str] = None):
             my_rank = i
         entries.append({"first_name": "You" if is_me else first, "city": x.get("city") or "", "pct": x["admission_pct"], "is_me": is_me})
     return {"entries": entries, "my_rank": my_rank}
+
+
+@app.post("/api/guide/send")
+async def guide_send(request: Request, body: dict, x_admin_key: Optional[str] = Header(None)):
+    """Email the Guide PDF to a buyer. Needs the secret GUIDE_ADMIN_KEY in the x-admin-key header.
+    Used by the team by hand for now; the payment system will call the same thing later."""
+    rate_limit(request)
+    if not GUIDE_ADMIN_KEY:
+        raise HTTPException(503, "Guide sending is not set up yet (GUIDE_ADMIN_KEY is missing).")
+    if not x_admin_key or not hmac.compare_digest(x_admin_key, GUIDE_ADMIN_KEY):
+        raise HTTPException(401, "Not allowed.")
+    email = _s(body.get("email"), 120).lower()
+    name = _s(body.get("name"), 80) or "there"
+    if not EMAIL_RE.match(email):
+        raise HTTPException(400, "Please give a valid email address.")
+    lead_id = valid_uuid(body["lead_id"]) if body.get("lead_id") else None
+    pdf = await fetch_guide()
+    sent = await asyncio.to_thread(send_guide_email, email, name, pdf)
+    try:  # keep a record of every delivery (table guide_deliveries)
+        await db("POST", "guide_deliveries", json={"email": email, "name": name, "lead_id": lead_id,
+                                                   "source": _s(body.get("source"), 40) or "manual", "sent": sent})
+    except Exception as e:  # noqa: BLE001
+        print("Could not record the delivery:", repr(e))
+    if not sent:
+        raise HTTPException(502, "The guide email could not be sent. Please try again.")
+    return {"ok": True, "sent": True, "email": email}
 
 
 @app.post("/api/report/email")
