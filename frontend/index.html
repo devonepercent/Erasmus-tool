@@ -1291,10 +1291,10 @@ details summary::-webkit-details-marker{display:none}
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="config.js"></script>
+<script src="https://erasmus-tool-frontend.vercel.app/config.js"></script>
 <script>
 /* ===== CONFIG: put your live backend address here, e.g. "https://em-checker.vercel.app" (no trailing slash). Leave "" to run with sample data. ===== */
-var CONFIG=window.CONFIG||{API_URL:""}; /* the address normally comes from config.js, next to this file */
+var CONFIG=window.CONFIG||{API_URL:"https://erasmus-checker-api.vercel.app"}; /* settings come from config.js on the page project (full address, so the page also works when shown at onepercentabroad.com/application/erasmus/tool); if it cannot load, the live server is used */
 (function(){var h=document.documentElement;if(CONFIG.API_URL){if(!CONFIG.SHOW_LEADERBOARD)h.classList.add('no-lb');if(!CONFIG.SHOW_LIVE_LINE)h.classList.add('no-live-line');if(CONFIG.SHOW_GUIDE_BUNDLE===false)h.classList.add('no-guide')}})();
 /* 'Book a free call' opens the company's get-started page in a new tab (the utm tags tell your CRM the lead came from the checker) */
 function bookCall(){window.open(CONFIG.BOOK_CALL_URL||'https://onepercentabroad.com/get-started?utm_source=em_chance_checker&utm_medium=referral&utm_campaign=chance_checker','_blank','noopener')}
