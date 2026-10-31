@@ -105,6 +105,11 @@ p{margin:0}
 #s-form .step{flex:none}
 #s-form .wcard>p.small{margin-bottom:14px!important}
 #s-form .wfoot{margin-top:14px}
+/* live page: Guide Bundle hidden until it is on sale (SHOW_GUIDE_BUNDLE in config.js) */
+.guide-off{display:none}
+html.no-guide .tier.feat,html.no-guide p.fix,html.no-guide .guide-on{display:none!important}
+html.no-guide .guide-off{display:inline}
+
 /* form: highlight a field that needs fixing */
 #s-form .field input.bad{border-color:#e5484d!important;box-shadow:0 0 0 3px rgba(229,72,77,.25)!important}
 
@@ -1226,8 +1231,8 @@ details summary::-webkit-details-marker{display:none}
   </div>
   <div class="pad stack">
     <div>
-      <h2>Two ways we can help</h2>
-      <p class="muted" style="margin-top:6px">Pick how deep you want to go.</p>
+      <h2><span class="guide-on">Two ways we can help</span><span class="guide-off">Work with a mentor</span></h2>
+      <p class="muted" style="margin-top:6px"><span class="guide-on">Pick how deep you want to go.</span><span class="guide-off">Get one to one help from a 1% Abroad mentor.</span></p>
     </div>
 
     <div class="tier feat">
@@ -1241,7 +1246,7 @@ details summary::-webkit-details-marker{display:none}
         <li>Step by step improvement plan for your 3 gaps</li>
         <li>Price credited if you join mentorship later</li>
       </ul>
-      <button class="btn primary flash" onclick="toast('Checkout opens here (mock)')">Buy the Guide Bundle</button>
+      <button class="btn primary flash" onclick="toast('The Guide Bundle opens soon. Meanwhile, book a free call to get started.')">Buy the Guide Bundle</button>
     </div>
 
     <div class="tier">
@@ -1254,7 +1259,7 @@ details summary::-webkit-details-marker{display:none}
         <li>Applications to 3 programmes, managed together</li>
         <li>Our students: 30 to 40% success rate</li>
       </ul>
-      <button class="btn navy" onclick="toast('Call booking opens here (mock)')">Book a free call</button>
+      <button class="btn navy" onclick="bookCall()">Book a free call</button>
     </div>
 
     <div style="position:relative">
@@ -1269,7 +1274,7 @@ details summary::-webkit-details-marker{display:none}
 
 <!-- sticky call bar -->
 <div class="sticky" id="sticky">
-  <button class="btn navy" onclick="toast('Call booking opens here (mock)')">Book a free call</button>
+  <button class="btn navy" onclick="bookCall()">Book a free call</button>
   <button class="btn ghost sm" onclick="go('offers')">Plans</button>
 </div>
 
@@ -1279,8 +1284,8 @@ details summary::-webkit-details-marker{display:none}
 <div class="modal" id="modal" onclick="if(event.target===this)closeModal()">
   <div class="sheet stack">
     <h3>Leaving already?</h3>
-    <p class="small muted">Take your chance report with you. We will send it as a PDF to your email, with the 3 things to improve.</p>
-    <button class="btn primary" onclick="closeModal();toast('PDF sent to your email (mock)')">Email me the PDF</button>
+    <p class="small muted">Take your chance report with you. We will email it to you, with the 3 things to improve.</p>
+    <button class="btn primary" onclick="closeModal();sendReport()">Email me my report</button>
     <button class="btn ghost" onclick="closeModal();go('landing')">No thanks, go back</button>
   </div>
 </div>
@@ -1290,7 +1295,9 @@ details summary::-webkit-details-marker{display:none}
 <script>
 /* ===== CONFIG: put your live backend address here, e.g. "https://em-checker.vercel.app" (no trailing slash). Leave "" to run with sample data. ===== */
 var CONFIG=window.CONFIG||{API_URL:""}; /* the address normally comes from config.js, next to this file */
-(function(){var h=document.documentElement;if(CONFIG.API_URL){if(!CONFIG.SHOW_LEADERBOARD)h.classList.add('no-lb');if(!CONFIG.SHOW_LIVE_LINE)h.classList.add('no-live-line')}})();
+(function(){var h=document.documentElement;if(CONFIG.API_URL){if(!CONFIG.SHOW_LEADERBOARD)h.classList.add('no-lb');if(!CONFIG.SHOW_LIVE_LINE)h.classList.add('no-live-line');if(CONFIG.SHOW_GUIDE_BUNDLE===false)h.classList.add('no-guide')}})();
+/* 'Book a free call' opens the company's get-started page in a new tab (the utm tags tell your CRM the lead came from the checker) */
+function bookCall(){window.open(CONFIG.BOOK_CALL_URL||'https://onepercentabroad.com/get-started?utm_source=em_chance_checker&utm_medium=referral&utm_campaign=chance_checker','_blank','noopener')}
 var API=null; /* the real result from the backend, when there is one */
 if(location.search.indexOf('internal')>-1)document.documentElement.classList.add('show-internal'); /* open the page with ?internal to see the team tools */
 var hasResult=false;
@@ -1340,7 +1347,7 @@ function go(name){
   SCREENS.forEach(function(s){document.getElementById('s-'+s).classList.toggle('active',s===name)});
   window.scrollTo(0,0);
   drawSketch(document.getElementById('s-'+name));
-  var vidOn=['landing','form','about'].indexOf(name)>-1;document.querySelectorAll('.bgvid').forEach(function(v,i){v.classList.toggle('show',vidOn&&(i+1)===(window.curBg||1))});document.getElementById('phone').classList.toggle('vid-on',vidOn);var tv=document.querySelector('.tvid');if(tv){if(name==='offers'){var pr=tv.play();if(pr&&pr.catch)pr.catch(function(){})}else{tv.pause()}}
+  var vidOn=['landing','form','about'].indexOf(name)>-1;document.querySelectorAll('.bgvid').forEach(function(v,i){v.classList.toggle('show',vidOn&&(i+1)===(window.curBg||1))});document.getElementById('phone').classList.toggle('vid-on',vidOn);var tv=document.querySelector('.tvid');if(tv){if(name==='offers'&&!document.documentElement.classList.contains('no-guide')){var pr=tv.play();if(pr&&pr.catch)pr.catch(function(){})}else{tv.pause()}}
   var showSticky=['result','leaderboard','recommendations'].indexOf(name)>-1;
   document.getElementById('sticky').classList.toggle('show',showSticky);
   if(name==='form'){step=1;showStep()}
