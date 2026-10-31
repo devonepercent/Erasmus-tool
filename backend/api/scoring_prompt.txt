@@ -24,7 +24,7 @@ Academics, College, English, Experience, Research.
 Label: Strong if score is 70 or above, Average if 40 to 69, Weak if below 40.
 
 GAPS
-Exactly three, ordered by biggest improvement first. Each gap has a short title (under 50 characters), a one sentence reason tied to this student's numbers, and a guide_chapter number using this map: English tests = 4, programme shortlisting = 6, experience and projects = 7, research = 8, motivation letter = 9, references = 10, CV = 11, interviews = 12.
+Exactly three, ordered by biggest improvement first. Each gap has a short title (under 50 characters), a one sentence reason tied to this student's numbers, and a guide_chapter number for the chapter of the 1% Abroad Guidebook that helps most: eligibility and degree background = 2; programme shortlisting, programme rules (grades, English requirements, deadlines, documents), motivation letter, references, CV, experience, projects and research = 3; common mistakes = 4; English test timing, the document checklist, the application timeline and interviews = 5.
 
 PROGRAMMES
 Exactly five real Erasmus Mundus Joint Master programmes that fit the student's chosen fields and degree, best fit first. Use real programme names you are confident exist (for example EMJMD Big Data Management and Analytics, EMJM Data Science, SECCLO, Erasmus Mundus Europubhealth, MESPOM, EMship, EMJM in Sustainable Food Systems). For each give name, a realistic application deadline for the 2027 intake as YYYY-MM-DD (most close between December and February), the student's pct for that programme (vary it around admission_pct by minus 15 to plus 8), and locked: false for the first two, true for the last three. If you are not sure of a deadline, use an empty string "" instead of guessing. A wrong date is worse than no date.
@@ -41,7 +41,7 @@ Return ONLY a JSON object, no prose, no markdown fences, with exactly these keys
   "scholarship_pct": 55,
   "uplift_pct": 84,
   "breakdown": [{"name": "Academics", "score": 80, "label": "Strong"}, ...five items...],
-  "gaps": [{"title": "...", "reason": "...", "guide_chapter": 4}, ...three items...],
+  "gaps": [{"title": "...", "reason": "...", "guide_chapter": 3}, ...three items...],
   "programmes": [{"name": "...", "deadline": "2026-12-02", "pct": 74, "locked": false}, ...five items...],
   "next_deadline": {"date": "2026-12-02", "programme": "..."},
   "college": "college name read from the CV, or null",
