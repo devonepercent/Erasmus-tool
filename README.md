@@ -1,6 +1,6 @@
 # EM Chance Checker
 
-Free Erasmus Mundus chance checker for 1% Abroad. A student fills a short form (or uploads a CV), Claude scores the profile, the result is saved in Supabase, the report is emailed, and the page shows admission %, scholarship %, gaps and programmes.
+Free Erasmus Mundus chance checker for 1% Abroad. A student fills a short form (or uploads a CV), Claude scores the profile, the result is saved in Supabase, and the page shows admission %, scholarship %, gaps and programmes.
 
 ```
 em-chance-checker/
@@ -21,7 +21,7 @@ em-chance-checker/
     loading-page.html       the loading screen on its own
 ```
 
-How it works: page -> server (`POST /api/chance`) -> Claude scores it -> saved in Supabase -> email sent -> result shown.
+How it works: page -> server (`POST /api/chance`) -> Claude scores it -> saved in Supabase -> result shown. Students get one email only: the Erasmus Bundle with their chance report, after they pay (set `REPORT_EMAIL_ON_CHECK=1` on the server to also email the report right after the form).
 
 ## Set it up, one step at a time
 
@@ -59,7 +59,7 @@ GitHub's website cannot take a zip, so unzip first. Create a private repository,
 4. Set `ALLOWED_ORIGINS` on the server to the page address (for example `https://your-page.vercel.app`) so only your page can use the server.
 
 ### Step 7. Test like a student
-Fill the form on your phone with a real email, with and without a CV. Check: the result appears, a row appears in Supabase, the email arrives. Try a wrong email on purpose: the form should return to the last step and show a clear message, not a fake result.
+Fill the form on your phone with a real email, with and without a CV. Check: the result appears and a row appears in Supabase (no email yet: the report is emailed with the Erasmus Bundle after payment). Try a wrong email on purpose: the form should return to the last step and show a clear message, not a fake result.
 
 ## What the live page hides on purpose
 When `API_URL` is filled in, the page hides two things that are sample content only:
@@ -68,8 +68,8 @@ When `API_URL` is filled in, the page hides two things that are sample content o
 
 Turn them on in `frontend/config.js` (`SHOW_LEADERBOARD:true`, `SHOW_LIVE_LINE:true`) only when they show real data. A leaderboard needs an opt-in tick box on the form first: until then no student is shown publicly.
 
-## Payments: the Guide through Razorpay
-"Buy the Guide" opens Razorpay's payment window for ₹499. The price is set on the server (`GUIDE_PRICE_PAISE`, default `49900`), never by the page. When the payment is confirmed, the server emails the Guide PDF, the same file as `/api/guide/send`. Every order is saved in the Supabase table `guide_orders`, and each order is emailed **once only**. "Get 1:1 Mentorship" (₹60,000) does not use Razorpay: it opens https://onepercentabroad.com/application/erasmus.
+## Payments: the Erasmus Bundle through Razorpay
+"Buy the Erasmus Bundle" opens Razorpay's payment window for ₹499. The price is set on the server (`GUIDE_PRICE_PAISE`, default `49900`), never by the page. When the payment is confirmed, the server sends one email: the bundle PDF attached, with the student's chance report in the email. The PDF is the same file `/api/guide/send` uses. Every order is saved in the Supabase table `guide_orders`, and each order is emailed **once only**. The 1:1 Mentorship card (₹60,000) does not use Razorpay: its "View details" button, like the one in the bottom bar,: opens https://onepercentabroad.com/application/erasmus.
 
 Set up (start with **Test mode**, no real money):
 1. Supabase -> SQL Editor: run `backend/supabase.sql` again. It is safe to rerun. It adds the `guide_orders` and `guide_deliveries` tables.
@@ -81,12 +81,12 @@ Set up (start with **Test mode**, no real money):
    - Active events: `payment.captured` and `order.paid`
    This makes sure a student who pays and closes the tab still gets the Guide. Payments for anything else on the same Razorpay account are ignored.
 5. Redeploy the server, then open `/api/health?deep=1`: `razorpay_keys`, `razorpay_webhook`, `supabase_guide_orders_table` and `guide_pdf` should all say ok.
-6. Check your chances on the page with your own email -> Buy the Guide -> pay with a Razorpay test card or test UPI (`success@razorpay`). The Guide should arrive by email, and the order should show `delivered` in `guide_orders`.
+6. Check your chances on the page with your own email -> Buy the Erasmus Bundle -> pay with a Razorpay test card or test UPI (`success@razorpay`). The bundle email should arrive, with your chance report in it, and the order should show `delivered` in `guide_orders`.
 7. To go live: activate the Razorpay account (KYC), generate **Live** keys, add a live webhook the same way, swap the three values on Vercel and redeploy. No code change.
 
 If a Guide email fails after payment, the order is marked `failed`. Razorpay retries the webhook automatically and the Guide is sent on the retry. You can also send it by hand with `/api/guide/send`.
 
-Optional page settings in `frontend/config.js`: `MENTORSHIP_URL` changes where "Get 1:1 Mentorship" goes, and `BOOK_CALL_URL` changes where "Book a free call" goes.
+Optional page settings in `frontend/config.js`: `MENTORSHIP_URL` changes where the "View details" buttons go, and `STORY_IMG_BASE` changes where the student photos load from (default `https://onepercentabroad.com/images/erasmus-stories/`).
 
 ## Changing the scoring
 On GitHub open `backend/api/scoring_prompt.txt` -> pencil -> edit in plain English -> Commit. Vercel redeploys in about a minute.

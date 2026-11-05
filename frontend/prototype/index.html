@@ -180,7 +180,7 @@ details summary::-webkit-details-marker{display:none}
 .bigbar{margin-top:10px}
 .bigbar .num{font-family:Satoshi,"General Sans",Arial,sans-serif;font-size:64px;line-height:64px;font-weight:400;letter-spacing:-.03em}
 .bigbar .track{height:2px;background:var(--hair);overflow:hidden;margin-top:12px}
-.bigbar .fill{height:100%;width:0;transition:width 1.2s cubic-bezier(.2,.8,.2,1)}
+.bigbar .fill{height:100%;width:0;transition:width 1.4s cubic-bezier(.33,1,.68,1)}
 .bigbar.second .num{font-size:40px;line-height:44px}
 .c-strong{background:var(--strong)} .c-avg{background:var(--avg)} .c-weak{background:var(--weak)}
 .t-strong{color:var(--accent)} .t-avg{color:var(--muted)} .t-weak{color:var(--weak-text)}
@@ -267,8 +267,41 @@ html.no-live-line .ticker{display:none!important}
 /* mentorship card flashes when sent here from the locked programmes */
 @keyframes tierPulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 45%,transparent)}100%{box-shadow:0 0 0 18px transparent}}
 .tier.pulse{animation:tierPulse 1.8s ease-out;border-radius:12px}
-.story .st-prog{font-size:12px;line-height:18px;color:var(--muted)}
-.story .st-out{font-size:12px;line-height:18px;color:var(--accent);font-weight:500}
+
+/* Back sits at the bottom of each screen */
+.backrow{padding:4px 24px calc(24px + env(safe-area-inset-bottom,0px))}
+.backrow .back,.wfoot .back{border:1px solid var(--rule);border-radius:10px;padding:10px 16px;margin:0;color:var(--ink);min-height:44px}
+.wfoot .back{flex:none;margin-right:14px}
+
+/* result: the report rises in and the percentages count up */
+@keyframes riseIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+#s-result.reveal .pad>*{animation:riseIn .6s cubic-bezier(.2,.8,.2,1) both}
+.bigbar .num{font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion:reduce){#s-result.reveal .pad>*{animation:none}}
+
+/* what's included, under each price */
+.incl-h{margin-top:14px;font-size:12px;line-height:16px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.tier ul.incl{margin-top:8px}
+.tier ul.incl b{font-weight:600}
+
+/* success stories: auto-scrolling cards, like onepercentabroad.com/application/erasmus */
+.stories{margin:0 -24px}
+.stories-head{display:flex;align-items:center;justify-content:space-between;padding:0 24px;margin-bottom:12px}
+.snav{display:flex;gap:8px}
+.snav button{width:36px;height:36px;border-radius:50%;border:1px solid var(--rule);background:var(--surface);color:var(--ink);display:grid;place-items:center;padding:0}
+.story-viewport{overflow:hidden;touch-action:pan-y;cursor:grab;user-select:none;-webkit-user-select:none}
+.story-viewport.is-dragging{cursor:grabbing}
+.story-track{display:flex;gap:12px;padding:4px 24px 16px;will-change:transform}
+.st-card{flex:0 0 68%;max-width:240px;background:var(--surface);border:1px solid var(--hair);border-radius:18px;overflow:hidden;box-shadow:0 8px 24px rgba(0,51,153,.07);display:flex;flex-direction:column}
+.st-photo{position:relative;aspect-ratio:1;background:linear-gradient(140deg,#010f70,#065dc7)}
+.st-photo img{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}
+.st-ini{display:grid;place-items:center;width:100%;height:100%;font-family:Satoshi,"General Sans",Arial,sans-serif;font-size:52px;font-weight:700;color:#ffcc00;letter-spacing:-.02em}
+.st-code{position:absolute;left:12px;bottom:12px;background:rgba(4,11,43,.8);color:#fff;font-size:12px;font-weight:600;letter-spacing:.4px;padding:5px 10px;border-radius:999px;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.st-body{padding:14px 16px 18px;display:flex;flex-direction:column;gap:6px}
+.st-chip{align-self:flex-start;background:#ffcc00;color:#040b2b;font-size:12px;font-weight:600;line-height:1.35;padding:5px 10px;border-radius:8px}
+.st-body h4{margin:4px 0 0;font-family:Satoshi,"General Sans",Arial,sans-serif;font-weight:700;font-size:18px;line-height:24px;color:var(--ink)}
+.st-body p{font-size:13px;line-height:19px;color:var(--muted)}
+.swipe-hint{padding:0 24px;font-size:12px;color:var(--muted)}
 
 /* small phones */
 @media (max-width:400px){
@@ -435,7 +468,6 @@ html.no-live-line .ticker{display:none!important}
 <!-- 2. ABOUT EM -->
 <section class="screen" id="s-about">
   <div class="topbar">
-    <button class="back" onclick="go('landing')">‹ Back</button>
     <div class="logo" role="img" aria-label="1% Abroad">1% Abroad</div>
     <button type="button" class="theme-btn" onclick="toggleTheme()" aria-label="Switch to dark theme"><svg class="i-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg><svg class="i-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button>
   </div>
@@ -472,12 +504,12 @@ html.no-live-line .ticker{display:none!important}
     </div>
     <button class="btn primary" onclick="go('form')">Check my chances for free</button>
   </div>
+  <div class="backrow"><button class="back" onclick="go('landing')">‹ Back</button></div>
 </section>
 
 <!-- 3. LEAD FORM (stepper) -->
 <section class="screen band" id="s-form">
   <div class="topbar band">
-    <button class="back" onclick="stepBack()">‹ Back</button>
     <div class="logo" role="img" aria-label="1% Abroad">1% Abroad</div>
     <button type="button" class="theme-btn" onclick="toggleTheme()" aria-label="Switch to dark theme"><svg class="i-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg><svg class="i-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button>
   </div>
@@ -563,6 +595,7 @@ html.no-live-line .ticker{display:none!important}
       </div>
 
       <div class="wfoot">
+        <button class="back" onclick="stepBack()">‹ Back</button>
         <div>
           <p class="cap muted" id="stepLabel">1 of 5</p>
           <div class="progress" style="margin-top:6px"><i id="prog" style="width:20%"></i></div>
@@ -593,7 +626,6 @@ html.no-live-line .ticker{display:none!important}
 <!-- 5. RESULT -->
 <section class="screen" id="s-result">
   <div class="topbar">
-    <button class="back" onclick="exitNudge()">‹ Back</button>
     <div class="logo" role="img" aria-label="1% Abroad">1% Abroad</div>
     <button class="back" onclick="share()" aria-label="Share" style="display:flex;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/></svg></button>
   </div>
@@ -629,16 +661,14 @@ html.no-live-line .ticker{display:none!important}
       <p class="small" style="margin-top:14px;color:var(--muted)">The difference is preparation. Your next page shows exactly what to prepare.</p>
     </div>
 
-    <button class="btn ghost" onclick="sendReport()">Send this report to my email</button>
-
     <div class="ibox" id="ibox"></div>
   </div>
+  <div class="backrow"><button class="back" onclick="go('landing')">‹ Back</button></div>
 </section>
 
 <!-- 6. RECOMMENDATIONS -->
 <section class="screen" id="s-recommendations">
   <div class="topbar">
-    <button class="back" onclick="go('result')">‹ Back</button>
     <div class="logo" role="img" aria-label="1% Abroad">1% Abroad</div>
     <button type="button" class="theme-btn" onclick="toggleTheme()" aria-label="Switch to dark theme"><svg class="i-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg><svg class="i-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button>
   </div>
@@ -673,36 +703,27 @@ html.no-live-line .ticker{display:none!important}
           </div>
           <div class="veil">
             <p class="small" style="font-weight:500">3 more programmes with your % for each</p>
-            <button class="btn sm navy" onclick="goMentorship()">Unlock with a free mentor call</button>
+            <button class="btn sm navy" onclick="goBundle()">Get more insights with Erasmus bundle</button>
           </div>
         </div>
       </div>
     </div>
 
-    <div>
-      <h3 style="margin-bottom:12px">Students we helped to get in</h3>
-      <div class="scroller">
-        <div class="story"><div class="avatar">AN</div><div><p class="small" style="font-weight:500">Archana A. Nair</p><p class="st-prog">Erasmus Mundus ACES Star Programme, also offered IMBRSea</p><p class="st-out">Partial scholarship worth ₹15 lakhs</p></div></div>
-        <div class="story"><div class="avatar">AM</div><div><p class="small" style="font-weight:500">Amaresh</p><p class="st-prog"><b>EMINENT</b> · Embedded Intelligence Nanosystems Engineering</p><p class="st-out">Fully funded Erasmus Mundus scholarship</p></div></div>
-        <div class="story"><div class="avatar">JJ</div><div><p class="small" style="font-weight:500">Jinsa Jobe</p><p class="st-prog">Sustainable Food Processing, Circular Food Systems and Future…</p><p class="st-out">Admitted with a 50% scholarship</p></div></div>
-        <div class="story"><div class="avatar">LR</div><div><p class="small" style="font-weight:500">Layan Razak</p><p class="st-prog"><b>EMM-NANO</b> · Nanoscience and Nanotechnology</p><p class="st-out">Admitted with a scholarship</p></div></div>
-        <div class="story"><div class="avatar">AS</div><div><p class="small" style="font-weight:500">Anjana Sunanda</p><p class="st-prog"><b>GLODEP</b> · Global Development Policy, Palacký University Olomouc</p><p class="st-out">Admitted to an Erasmus Mundus Joint Master’s</p></div></div>
-        <div class="story"><div class="avatar">SM</div><div><p class="small" style="font-weight:500">Sisa Maria Sunny</p><p class="st-prog">Journalism, Media and Globalisation</p><p class="st-out">Selected for an Erasmus Mundus Joint Master’s</p></div></div>
-        <div class="story"><div class="avatar">AR</div><div><p class="small" style="font-weight:500">Aiswarya Raj</p><p class="st-prog"><b>DENSYS</b> · Decentralised Smart Energy Systems</p><p class="st-out">Selected for an Erasmus Mundus Joint Master’s</p></div></div>
-        <div class="story"><div class="avatar">FL</div><div><p class="small" style="font-weight:500">Fathima Lamshana K K</p><p class="st-prog"><b>IMBRSea</b> · Marine Biological Resources</p><p class="st-out">Selected for an Erasmus Mundus Joint Master’s</p></div></div>
-        <div class="story"><div class="avatar">TM</div><div><p class="small" style="font-weight:500">Tanab Mehraj</p><p class="st-prog"><b>IMBRSea</b> · Marine Biological Resources</p><p class="st-out">Selected for the 2026 cohort</p></div></div>
-        <div class="story"><div class="avatar">SU</div><div><p class="small" style="font-weight:500">Supratesh</p><p class="st-prog"><b>IMBRSea</b> · Marine Biological Resources</p><p class="st-out">Selected for the 2026 cohort</p></div></div>
-        <div class="story"><div class="avatar">SH</div><div><p class="small" style="font-weight:500">Shabnam</p><p class="st-prog"><b>MERGED</b> · Erasmus Mundus Joint Master’s Programme</p><p class="st-out">Selected for an Erasmus Mundus Joint Master’s</p></div></div>
-        <div class="story"><div class="avatar">NI</div><div><p class="small" style="font-weight:500">Nidhishree</p><p class="st-prog">International Humanitarian Action</p><p class="st-out">Selected for an Erasmus Mundus Joint Master’s</p></div></div>
+    <div class="stories">
+      <div class="stories-head">
+        <h3>Students we helped to get in</h3>
+        <div class="snav"><button type="button" onclick="storyPage(-1)" aria-label="Previous students">←</button><button type="button" onclick="storyPage(1)" aria-label="Next students">→</button></div>
       </div>
+      <div class="story-viewport" id="storyVp"><div class="story-track" id="storyTrack" role="list" aria-label="Erasmus Mundus success stories"></div></div>
+      <p class="swipe-hint" aria-hidden="true">Swipe to see more →</p>
     </div>
   </div>
+  <div class="backrow"><button class="back" onclick="go('result')">‹ Back</button></div>
 </section>
 
 <!-- 6b. LEADERBOARD -->
 <section class="screen" id="s-leaderboard">
   <div class="topbar">
-    <button class="back" onclick="go(hasResult?'result':'landing')">‹ Back</button>
     <div class="logo" role="img" aria-label="1% Abroad">1% Abroad</div>
     <button type="button" class="theme-btn" onclick="toggleTheme()" aria-label="Switch to dark theme"><svg class="i-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg><svg class="i-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button>
   </div>
@@ -718,12 +739,12 @@ html.no-live-line .ticker{display:none!important}
     <button class="btn primary" id="lbCta" onclick="go(hasResult?'recommendations':'form')">Increase my chances</button>
     <p class="cap muted" style="text-align:center">Shown as first name and city only. Students choose whether to appear here.</p>
   </div>
+  <div class="backrow"><button class="back" onclick="go(hasResult?'result':'landing')">‹ Back</button></div>
 </section>
 
 <!-- 7. OFFERS -->
 <section class="screen" id="s-offers">
   <div class="topbar">
-    <button class="back" onclick="go('recommendations')">‹ Back</button>
     <div class="logo" role="img" aria-label="1% Abroad">1% Abroad</div>
     <button type="button" class="theme-btn" onclick="toggleTheme()" aria-label="Switch to dark theme"><svg class="i-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg><svg class="i-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button>
   </div>
@@ -735,80 +756,76 @@ html.no-live-line .ticker{display:none!important}
 
     <div class="tier feat">
       <span class="badge">Launch offer, this week only</span>
-      <h3>The Erasmus Mundus Guide</h3>
+      <h3>The Erasmus Bundle</h3>
       <p class="price">₹499 <s>₹1,499</s></p>
-      <ul>
+      <p class="incl-h">What's included</p>
+      <ul class="incl">
         <li>The 1% Abroad Guidebook for the 2027 intake, 22 pages</li>
         <li>5 habits of students who won the scholarship</li>
         <li>Where strong applicants lose the scholarship</li>
         <li>An 8 step roadmap, key dates and a document checklist</li>
+        <li>Your full chance report, emailed with the bundle</li>
         <li>Price credited if you join mentorship later</li>
       </ul>
-      <button class="btn primary" onclick="buyGuide(this)">Buy the Guide</button>
+      <button class="btn primary" onclick="buyGuide(this)">Buy the Erasmus Bundle</button>
     </div>
 
     <div class="tier">
       <span class="badge">Most popular</span>
       <h3>1:1 Mentorship</h3>
       <p class="price">₹60,000</p>
-      <ul>
-        <li>A dedicated mentor from shortlist to interview</li>
-        <li>SOP, references and documents reviewed line by line</li>
-        <li>Applications to 3 programmes, managed together</li>
-        <li>Our students: 30 to 40% success rate</li>
+      <p class="incl-h">What's included</p>
+      <ul class="incl">
+        <li><b>1:1 Mentor Support</b> · a dedicated mentor, start to finish</li>
+        <li><b>Application Filing</b> · end-to-end submission, handled for you</li>
+        <li><b>SOP</b> · Statement of Purpose tailored per programme</li>
+        <li><b>LORs</b> · recommendation letters drafted and managed</li>
+        <li><b>Requirements Mapping</b> · eligibility and document checklist</li>
+        <li><b>Deadline Tracking</b> · every intake and deadline monitored</li>
+        <li>Up to 3 programme applications</li>
       </ul>
-      <button class="btn navy" onclick="mentorshipPage()">Get 1:1 Mentorship</button>
-      <button class="btn ghost" style="margin-top:10px" onclick="bookCall()">Book a free call first</button>
+      <button class="btn navy" onclick="mentorshipPage()">View details</button>
     </div>
 
     <button class="btn ghost" onclick="go('landing')">Back to start</button>
   </div>
+  <div class="backrow"><button class="back" onclick="go('recommendations')">‹ Back</button></div>
 </section>
 
 <!-- sticky call bar -->
 <div class="sticky" id="sticky">
-  <button class="btn navy" onclick="bookCall()">Book a free call</button>
+  <button class="btn navy" onclick="mentorshipPage()">View details</button>
   <button class="btn ghost sm" onclick="go('offers')">Plans</button>
 </div>
 
 </div>
 
-<!-- exit nudge -->
-<div class="modal" id="modal" onclick="if(event.target===this)closeModal()">
-  <div class="sheet stack">
-    <h3>Leaving already?</h3>
-    <p class="small muted">Take your chance report with you. We will email it to you, with the 3 things to improve.</p>
-    <button class="btn primary" onclick="closeModal();sendReport()">Email me my report</button>
-    <button class="btn ghost" onclick="closeModal();go('landing')">No thanks, go back</button>
-  </div>
-</div>
 <div class="toast" id="toast"></div>
 
 <script>
 /* ===== showcase copy: always runs on sample data. The live page is ../index.html ===== */
 var CONFIG={API_URL:""};
-function bookCall(){window.open(CONFIG.BOOK_CALL_URL||'https://onepercentabroad.com/get-started?utm_source=em_chance_checker&utm_medium=referral&utm_campaign=chance_checker','_blank','noopener')}
-/* 'Get 1:1 Mentorship' opens the company's Erasmus application page (utm tags as for the call link) */
+/* 'View details' opens the company's Erasmus mentorship page (utm tags as for the call link) */
 function mentorshipPage(){window.open(CONFIG.MENTORSHIP_URL||'https://onepercentabroad.com/application/erasmus?utm_source=em_chance_checker&utm_medium=referral&utm_campaign=chance_checker','_blank','noopener')}
-/* 'Buy the Guide': the server makes a Razorpay order (it sets the price), Razorpay's window takes the payment,
+/* 'Buy the Erasmus Bundle': the server makes a Razorpay order (it sets the price), Razorpay's window takes the payment,
    then the server checks the payment and emails the Guide. A webhook on the server covers a closed tab. */
 function loadRzp(){return new Promise(function(ok,no){if(window.Razorpay)return ok();var s=document.createElement('script');s.src='https://checkout.razorpay.com/v1/checkout.js';s.onload=ok;s.onerror=function(){no(new Error('Could not open the payment window. Check your connection and try again.'))};document.head.appendChild(s)})}
 function apiPost(path,body){return fetch(CONFIG.API_URL+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json().catch(function(){return {}}).then(function(j){if(!r.ok)throw new Error(typeof j.detail==='string'?j.detail:'Something went wrong. Please try again.');return j})})}
 function buyGuide(btn){
   if(!CONFIG.API_URL){toast('Razorpay checkout opens here (sample page)');return}
   var f=collectForm();
-  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email)){toast('Check your chances first, so we know where to send the Guide');go('form');return}
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email)){toast('Check your chances first, so we know where to send the Erasmus Bundle');go('form');return}
   var label=btn.textContent;btn.disabled=true;btn.textContent='Opening payment…';
   function reset(){btn.disabled=false;btn.textContent=label}
   Promise.all([loadRzp(),apiPost('/api/guide/order',{name:f.name,email:f.email,whatsapp:f.whatsapp,lead_id:API?API.lead_id:null})]).then(function(res){var o=res[1];
-    var rz=new Razorpay({key:o.key_id,amount:o.amount,currency:o.currency,order_id:o.order_id,name:'1% Abroad',description:'The Erasmus Mundus Guide',
+    var rz=new Razorpay({key:o.key_id,amount:o.amount,currency:o.currency,order_id:o.order_id,name:'1% Abroad',description:'The Erasmus Bundle',
       prefill:{name:f.name,email:f.email,contact:f.whatsapp},theme:{color:'#065dc7'},
-      handler:function(p){btn.textContent='Confirming payment…';apiPost('/api/guide/verify',p).then(function(j){reset();toast('Payment received. The Guide is on its way to '+(j.email||f.email))}).catch(function(e){reset();toast(e.message)})},
+      handler:function(p){btn.textContent='Confirming payment…';apiPost('/api/guide/verify',p).then(function(j){reset();toast('Payment received. Your Erasmus Bundle is on its way to '+(j.email||f.email))}).catch(function(e){reset();toast(e.message)})},
       modal:{ondismiss:reset}});
     rz.on('payment.failed',function(r){toast((r.error&&r.error.description)||'The payment did not go through. Please try again.')});
     rz.open();}).catch(function(e){reset();toast(e.message)});}
-/* send people to the mentorship card on the offers page */
-function goMentorship(){go('offers');setTimeout(function(){var t=document.querySelector('#s-offers .tier:not(.feat)');if(t){t.scrollIntoView({behavior:'smooth',block:'center'});t.classList.add('pulse');setTimeout(function(){t.classList.remove('pulse')},1900)}},150)}
+/* send people to the Erasmus Bundle card on the offers page (the mentorship card if the bundle is switched off) */
+function goBundle(){go('offers');setTimeout(function(){var t=document.querySelector(document.documentElement.classList.contains('no-guide')?'#s-offers .tier:not(.feat)':'#s-offers .tier.feat');if(t){t.scrollIntoView({behavior:'smooth',block:'center'});t.classList.add('pulse');setTimeout(function(){t.classList.remove('pulse')},1900)}},150)}
 var API=null; /* holds the real result from the backend */
 var hasResult=false;
 var SCREENS=['landing','about','form','analysing','result','leaderboard','recommendations','offers'];
@@ -818,7 +835,7 @@ var DATA={
     bd:[['Academics',82,'Strong','strong'],['College',70,'Strong','strong'],['English',45,'Average','avg'],['Experience',30,'Weak','weak'],['Research',55,'Average','avg']],
     gaps:[['Take IELTS before December','Programmes in your list need 6.5 overall. A 7.0 moves you into the top band.','Chapter 5'],['Add one internship or project with a real dataset','Experience is your weakest line. Even a 6 week project counts if written well.','Chapter 3'],['Rewrite your motivation letter around one problem','Admits in your field write about a specific problem, not their interest in Europe.','Chapter 3']],
     progs:[74,69],
-    ibox:'<b>Internal:</b> Score 72%, tagged <b>High intent lead</b>. Routed to counsellor queue, call within 48 hours. Page leans on "Book a free call".'},
+    ibox:'<b>Internal:</b> Score 72%, tagged <b>High intent lead</b>. Routed to counsellor queue, call within 48 hours. Page leans on "View details".'},
   low:{adm:38,sch:21,to:65,
     bd:[['Academics',48,'Average','avg'],['College',40,'Average','avg'],['English',20,'Weak','weak'],['Experience',15,'Weak','weak'],['Research',10,'Weak','weak']],
     gaps:[['Take IELTS, target 7.0 or above','Without an English score most programmes will not shortlist you. This is the single biggest lift.','Chapter 5'],['Get 3 to 6 months of relevant experience','A project, internship or volunteering in your field changes how your profile reads.','Chapter 3'],['Pick programmes that weigh motivation over CGPA','We have mapped which programmes do. Applying to the right ones doubles your odds.','Chapter 3']],
@@ -933,7 +950,15 @@ function renderResult(){hasResult=true;var d=current();
   var br=document.getElementById('rBreak');br.innerHTML='';
   d.bd.forEach(function(r){br.innerHTML+='<div class="bd"><span>'+r[0]+'</span><div class="track"><div class="fill c-'+r[3]+'" data-w="'+r[1]+'"></div></div><span class="tag t-'+r[3]+'">'+r[2]+'</span></div>'});
   document.getElementById('ibox').innerHTML=d.ibox;document.getElementById('ibox').classList.add('show');
-  requestAnimationFrame(function(){setTimeout(function(){a.style.width=d.adm+'%';s.style.width=d.sch+'%';br.querySelectorAll('.fill').forEach(function(f){f.style.width=f.dataset.w+'%'})},80)});}
+  var sec=document.getElementById('s-result');sec.classList.remove('reveal');void sec.offsetWidth;
+  Array.prototype.forEach.call(sec.querySelectorAll('.pad>*'),function(el,i){el.style.animationDelay=(i*90)+'ms'});sec.classList.add('reveal');
+  countUp(document.getElementById('rAdm'),d.adm,1400,250);countUp(document.getElementById('rSch'),d.sch,1400,400);
+  requestAnimationFrame(function(){setTimeout(function(){a.style.width=d.adm+'%';s.style.width=d.sch+'%';br.querySelectorAll('.fill').forEach(function(f){f.style.width=f.dataset.w+'%'})},250)});}
+/* a percentage that climbs from 0 like a loading bar, easing out as it lands */
+function countUp(el,to,dur,delay){if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches){el.textContent=to+'%';return}
+  var run=(el._run||0)+1;el._run=run;el.textContent='0%';
+  setTimeout(function(){var t0=null;function f(t){if(el._run!==run)return;if(t0===null)t0=t;var p=Math.min(1,(t-t0)/dur),e=1-Math.pow(1-p,3);
+    el.textContent=Math.round(to*e)+'%';if(p<1)requestAnimationFrame(f)}requestAnimationFrame(f)},delay||0)}
 function renderRecs(){var d=current();
   document.getElementById('uFrom').textContent=d.adm+'%';document.getElementById('uTo').textContent=d.to+'%';
   document.getElementById('p1').textContent=d.progs[0]+'%';document.getElementById('p2').textContent=d.progs[1]+'%';
@@ -942,12 +967,8 @@ function renderRecs(){var d=current();
   var g=document.getElementById('gaps');g.innerHTML='';
   d.gaps.forEach(function(r,i){g.innerHTML+='<div class="card gap"><div class="n">'+(i+1)+'</div><div><p style="font-weight:500;font-size:15px;line-height:22px">'+r[0]+'</p><p class="small muted" style="margin-top:4px">'+r[1]+'</p><p class="fix">Fix this in '+r[2]+' of the Guide</p></div></div>'});
   if(!API){var dl=new Date('2026-12-02');var days=Math.max(0,Math.ceil((dl-new Date())/86400000));document.getElementById('cdDays').textContent=days+' days';}}
-function exitNudge(){document.getElementById('modal').classList.add('show')}
-function closeModal(){document.getElementById('modal').classList.remove('show')}
 function share(){var d=current();var text='I just checked my Erasmus Mundus chances with 1% Abroad: '+d.adm+'%. Check yours free: '+location.href.split('#')[0].split('?')[0];
   if(navigator.share){navigator.share({text:text}).catch(function(){})}else{window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank')}}
-function sendReport(){if(!API){toast('Report sent to your email (mock)');return;}
-  fetch(CONFIG.API_URL+'/api/report/email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lead_id:API.lead_id})}).then(function(){toast('Report sent to your email')}).catch(function(){toast('Could not send, try again')});}
 var tt;function toast(m){var t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(tt);tt=setTimeout(function(){t.classList.remove('show')},Math.max(2200,m.length*55))}
 /* leaderboard */
 var LB=[['Riya','Kochi',81],['Arjun','Thrissur',77],['Nimisha','Calicut',74],['Devika','Kottayam',71],['Fathima','Malappuram',66],['Akhil','Alappuzha',64],['Sneha','Trivandrum',61],['Harsha','Kasaragod',59],['Rahul','Kannur',57],['Aparna','Pathanamthitta',55],['Aswin','Ernakulam',52],['Nithya','Idukki',50],['Meera','Palakkad',46],['Vishnu','Kozhikode',44],['Jithin','Kollam',40],['Lakshmi','Thrissur',38],['Anjali','Wayanad',33],['Sanjay','Kochi',31],['Divya','Calicut',28],['Abhinav','Kannur',24]];
@@ -971,6 +992,43 @@ function toggleTheme(){var r=document.documentElement,dark=r.getAttribute('data-
   document.dispatchEvent(new Event('themechange'));}
 /* ticker */
 var tk=document.querySelectorAll('#ticker div'),ti=0;if(tk.length)setInterval(function(){tk[ti].classList.remove('on');ti=(ti+1)%tk.length;tk[ti].classList.add('on')},3200);
+/* success stories: cards glide on their own, pause on hover or touch, can be swiped or moved with the arrows */
+var STORIES=[["Amaresh", "EMINENT", "Embedded Intelligence Nanosystems Engineering", "Fully funded Erasmus Mundus scholarship", "amaresh.webp"], ["Archana A. Nair", "ACES Star", "Erasmus Mundus ACES Star Programme · also offered IMBRSea", "Partial scholarship worth ₹15 lakhs", "archana-a-nair.webp"], ["Jinsa Jobe", "", "Sustainable Food Processing, Circular Food Systems and Future Foods", "Admitted with a 50% scholarship", "jinsa-jobe.webp"], ["Layan Razak", "EMM-NANO", "Nanoscience and Nanotechnology", "Admitted with a scholarship", "layan-razak.webp"], ["Anjana Sunanda", "GLODEP", "Global Development Policy · Palacký University Olomouc", "Admitted to an Erasmus Mundus Joint Master's", "anjana-sunanda.webp"], ["Tanab Mehraj", "IMBRSea", "Marine Biological Resources", "Selected for the 2026 cohort", "tanab-mehraj.webp"], ["Sisa Maria Sunny", "", "Journalism, Media and Globalisation", "Selected for an Erasmus Mundus Joint Master's", "sisa-mariya.webp"], ["Aiswarya Raj", "DENSYS", "Decentralised Smart Energy Systems", "Selected for an Erasmus Mundus Joint Master's", "aiswarya-raj.webp"], ["Fathima Lamshana K K", "IMBRSea", "Marine Biological Resources", "Selected for an Erasmus Mundus Joint Master's", "fathima-lamshana-k-k.webp"], ["Supratesh", "IMBRSea", "Marine Biological Resources", "Selected for the 2026 cohort", "supratesh.webp"], ["Anjima Divakar", "EMMIR", "Migration and Intercultural Relations", "Selected for an Erasmus Mundus Master's", "anjima-divakar.webp"], ["Nidhishree", "", "International Humanitarian Action", "Selected for an Erasmus Mundus Joint Master's", ""], ["Shabnam", "MERGED", "Erasmus Mundus Joint Master's Programme", "Selected for an Erasmus Mundus Joint Master's", "shabnam.webp"]];
+var storyPage=function(){};
+(function(){var vp=document.getElementById('storyVp'),tr=document.getElementById('storyTrack');if(!vp||!tr)return;
+  var base=CONFIG.STORY_IMG_BASE||'https://onepercentabroad.com/images/erasmus-stories/';
+  function ini(n){return n.split(' ').filter(Boolean).slice(0,2).map(function(w){return w[0]}).join('').toUpperCase()}
+  function card(s,clone){return '<article class="st-card"'+(clone?' aria-hidden="true"':' role="listitem"')+'><div class="st-photo">'+
+    (s[4]?'<img src="'+base+s[4]+'" alt="'+(clone?'':esc(s[0]))+'" width="320" height="320" loading="lazy" draggable="false" onerror="this.outerHTML=\'<span class=st-ini>'+ini(s[0])+'</span>\'">':'<span class="st-ini">'+ini(s[0])+'</span>')+
+    (s[1]?'<span class="st-code">'+esc(s[1])+'</span>':'')+'</div><div class="st-body"><span class="st-chip">'+esc(s[3])+'</span><h4>'+esc(s[0])+'</h4><p>'+esc(s[2])+'</p></div></article>'}
+  tr.innerHTML=STORIES.map(function(s){return card(s,false)}).join('')+STORIES.map(function(s){return card(s,true)}).join('');
+  var N=STORIES.length,SPEED=32,RESUME=2500,m={offset:0,vel:0,target:null,pausedUntil:0,hover:false,step:0},setW=0,onScreen=false,drag=null;
+  var reduced=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function measure(){var a=tr.children[0],b=tr.children[N];setW=a&&b?b.offsetLeft-a.offsetLeft:0;m.step=setW/N}
+  function pause(){m.pausedUntil=Date.now()+RESUME}
+  storyPage=function(dir){if(!m.step)measure();if(!m.step)return;pause();m.vel=0;var n=Math.max(1,Math.floor(vp.clientWidth*.8/m.step));
+    m.target=Math.round((m.target==null?m.offset:m.target)/m.step)*m.step+dir*n*m.step};
+  if(window.ResizeObserver)new ResizeObserver(measure).observe(tr);
+  if(window.IntersectionObserver)new IntersectionObserver(function(e){onScreen=e[0].isIntersecting;if(onScreen)measure()}).observe(vp);else onScreen=true;
+  vp.addEventListener('pointerdown',function(e){if(e.pointerType==='mouse'&&e.button!==0)return;drag={id:e.pointerId,x:e.clientX,y:e.clientY,offset:m.offset,lastX:e.clientX,lastT:performance.now(),active:false};m.vel=0;m.target=null;pause()});
+  vp.addEventListener('pointermove',function(e){if(e.pointerType==='mouse')m.hover=true;if(!drag||e.pointerId!==drag.id)return;var dx=e.clientX-drag.x;
+    if(!drag.active){if(Math.abs(dx)<6||Math.abs(dx)<Math.abs(e.clientY-drag.y))return;drag.active=true;try{vp.setPointerCapture(e.pointerId)}catch(_){}vp.classList.add('is-dragging')}
+    var now=performance.now(),dt=Math.max(now-drag.lastT,1);m.vel=.8*(-(e.clientX-drag.lastX)/dt)*1000+.2*m.vel;drag.lastX=e.clientX;drag.lastT=now;m.offset=drag.offset-dx;pause()});
+  function up(e){if(!drag||e.pointerId!==drag.id)return;if(!drag.active||performance.now()-drag.lastT>80)m.vel=0;drag=null;vp.classList.remove('is-dragging');pause()}
+  vp.addEventListener('pointerup',up);vp.addEventListener('pointercancel',up);
+  vp.addEventListener('pointerleave',function(e){if(e.pointerType!=='mouse')return;m.hover=false;m.pausedUntil=Math.min(m.pausedUntil,Date.now()+600)});
+  vp.addEventListener('wheel',function(e){if(Math.abs(e.deltaX)<=Math.abs(e.deltaY))return;e.preventDefault();m.target=null;m.vel=0;m.offset+=e.deltaX;pause()},{passive:false});
+  var last=performance.now(),drawn=NaN;
+  function tick(now){var dt=Math.min(now-last,50)/1000;last=now;
+    if(onScreen&&!setW)measure();
+    if(!(drag&&drag.active)){
+      if(m.target!=null){var d=m.target-m.offset;m.offset+=d*Math.min(1,dt*9);if(Math.abs(d)<.5){m.offset=m.target;m.target=null}}
+      else if(Math.abs(m.vel)>8){m.offset+=m.vel*dt;m.vel*=Math.pow(.03,dt)}
+      else if(!reduced&&onScreen&&!document.hidden&&!m.hover&&Date.now()>m.pausedUntil){m.vel=0;m.offset+=SPEED*dt}}
+    if(setW&&(m.offset>=setW||m.offset<0)){var sh=Math.floor(m.offset/setW)*setW;m.offset-=sh;if(m.target!=null)m.target-=sh;if(drag)drag.offset-=sh}
+    if(m.offset!==drawn){tr.style.transform='translate3d('+(-m.offset)+'px,0,0)';drawn=m.offset}
+    requestAnimationFrame(tick)}
+  requestAnimationFrame(tick);})();
 /* open at hash */
 var h=(location.hash||'').replace('#','');if(SCREENS.indexOf(h)>-1&&h!=='analysing')go(h);
 </script>

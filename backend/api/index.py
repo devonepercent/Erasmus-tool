@@ -3,13 +3,13 @@ EM Chance Checker backend
 -------------------------
 One small server:
   GET  /api/health          is the server up, and which settings are filled in (add ?deep=1 to test each service)
-  POST /api/chance          form (+ optional CV) -> score, saves the lead, emails the report (Resend, or Gmail)
+  POST /api/chance          form (+ optional CV) -> score, saves the lead (report is emailed with the bundle after payment)
   GET  /api/leaderboard     last 7 days, only students who agreed to appear
   POST /api/report/email    re-send the report email for a lead
   GET  /api/share           share text + link for a lead
   POST /api/guide/order     start a Razorpay payment for the Guide (price is set here, never by the page)
-  POST /api/guide/verify    the page reports a finished payment -> signature checked -> Guide emailed
-  POST /api/razorpay/webhook  Razorpay reports a payment -> signature checked -> Guide emailed (never twice)
+  POST /api/guide/verify    the page reports a finished payment -> signature checked -> Erasmus Bundle emailed
+  POST /api/razorpay/webhook  Razorpay reports a payment -> signature checked -> Erasmus Bundle emailed (never twice)
 
 Settings come from environment variables (see .env.example).
 Run locally:   uvicorn api.index:app --reload --port 8000     (from the backend folder)
@@ -58,6 +58,10 @@ RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "")
 RAZORPAY_WEBHOOK_SECRET = os.environ.get("RAZORPAY_WEBHOOK_SECRET", "")  # the secret you type when adding the webhook
 GUIDE_PRICE_PAISE = int(os.environ.get("GUIDE_PRICE_PAISE", "49900"))  # ₹499 (Razorpay counts in paise)
 BOOK_CALL_URL = os.environ.get("BOOK_CALL_URL", "https://onepercentabroad.com/get-started")
+MENTORSHIP_URL = os.environ.get("MENTORSHIP_URL", "https://onepercentabroad.com/application/erasmus")
+# Students get one email only: the Erasmus Bundle with their chance report, after they pay.
+# Set REPORT_EMAIL_ON_CHECK=1 to also email the report as soon as the form is sent (the old behaviour).
+REPORT_EMAIL_ON_CHECK = os.environ.get("REPORT_EMAIL_ON_CHECK", "0").strip().lower() in ("1", "true", "yes")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://onepercentabroad.com/chance")
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-5-5")
 # Sonnet 5.5 thinks before answering unless told not to. That thinking is billed and counts toward the reply limit.
@@ -364,12 +368,11 @@ def email_service() -> str:
     return "none"
 
 
-def build_report(lead: dict):
+def report_lines(lead: dict) -> list:
+    """The chance report as plain-text lines (used in the report email and in the bundle email)."""
     gaps = lead.get("gaps") or []
     progs = lead.get("programme_matches") or []
     lines = [
-        f"Hi {lead.get('name', '')},",
-        "",
         "Your Erasmus Mundus chance report from 1% Abroad:",
         f"  Admission chance: {lead.get('admission_pct')}%",
         f"  Scholarship chance: {lead.get('scholarship_pct')}%",
@@ -383,11 +386,14 @@ def build_report(lead: dict):
     for p in progs[:5]:
         when = f" (deadline {p.get('deadline')})" if p.get("deadline") else ""
         lines.append(f"  - {p.get('name')}{when}: {p.get('pct')}%")
-    lines += [
+    lines += ["", "This is an estimate built from past admit data, not a guarantee."]
+    return lines
+
+
+def build_report(lead: dict):
+    lines = [f"Hi {lead.get('name', '')},", ""] + report_lines(lead) + [
         "",
-        "This is an estimate built from past admit data, not a guarantee.",
-        "",
-        f"See your full result and book a free call with a mentor: {FRONTEND_URL}",
+        f"See your full result: {FRONTEND_URL}",
         "",
         "1% Abroad, Calicut",
     ]
@@ -478,24 +484,28 @@ async def fetch_guide() -> bytes:
     return r.content
 
 
-def build_guide_email(name: str):
-    text = "\n".join([
+def build_guide_email(name: str, lead: Optional[dict] = None):
+    lines = [
         f"Hi {name},",
         "",
-        "Thank you for buying the Erasmus Mundus Guide. Your copy is attached to this email as a PDF.",
+        "Thank you for buying the Erasmus Bundle. Your guidebook is attached to this email as a PDF.",
         "",
         "Inside: the five habits of students who won the scholarship, where strong applicants lose it,",
         "and an 8 step roadmap with key dates and a document checklist for the 2027 intake.",
+    ]
+    if lead and lead.get("admission_pct") is not None:
+        lines += ["", "-" * 40, ""] + report_lines(lead) + ["", "-" * 40]
+    lines += [
         "",
-        f"Want a mentor to go through your profile with you? Book a free call: {BOOK_CALL_URL}",
+        f"Want a mentor to take you from shortlist to submission? See the details: {MENTORSHIP_URL}",
         "",
         "1% Abroad, Calicut",
-    ])
-    return "Your Erasmus Mundus Guide from 1% Abroad", text
+    ]
+    return "Your Erasmus Bundle from 1% Abroad", "\n".join(lines)
 
 
-def send_guide_email(email: str, name: str, pdf: bytes) -> bool:
-    subject, text = build_guide_email(name)
+def send_guide_email(email: str, name: str, pdf: bytes, lead: Optional[dict] = None) -> bool:
+    subject, text = build_guide_email(name, lead)
     files = [(GUIDE_FILE, pdf)]
     service = email_service()
     if service == "resend":
@@ -664,8 +674,9 @@ async def chance(request: Request, payload: str = Form(...), cv_file: Optional[U
     except Exception as e:  # noqa: BLE001
         print("Supabase insert error:", repr(e))
 
-    # Send the email before replying: serverless hosts can stop a function right after it replies.
-    email_sent = await asyncio.to_thread(send_report_email, row)
+    # The report is emailed with the Erasmus Bundle after payment, not now (unless REPORT_EMAIL_ON_CHECK is on).
+    # Send before replying: serverless hosts can stop a function right after it replies.
+    email_sent = await asyncio.to_thread(send_report_email, row) if REPORT_EMAIL_ON_CHECK else False
 
     public = {k: v for k, v in result.items() if not k.startswith("_")}
     public.update({"lead_id": lead_id, "saved": saved, "email_sent": email_sent})
@@ -706,8 +717,14 @@ async def guide_send(request: Request, body: dict, x_admin_key: Optional[str] = 
     if not EMAIL_RE.match(email):
         raise HTTPException(400, "Please give a valid email address.")
     lead_id = valid_uuid(body["lead_id"]) if body.get("lead_id") else None
+    lead = None
+    if lead_id:
+        try:
+            lead = await get_lead(lead_id)
+        except Exception as e:  # noqa: BLE001
+            print("Could not load the report for the bundle email:", repr(e))
     pdf = await fetch_guide()
-    sent = await asyncio.to_thread(send_guide_email, email, name, pdf)
+    sent = await asyncio.to_thread(send_guide_email, email, name, pdf, lead)
     try:  # keep a record of every delivery (table guide_deliveries)
         await db("POST", "guide_deliveries", json={"email": email, "name": name, "lead_id": lead_id,
                                                    "source": _s(body.get("source"), 40) or "manual", "sent": sent})
@@ -761,9 +778,15 @@ async def deliver_guide(order_id: str, payment_id: str, source: str) -> dict:
         return {"ok": True, "email": row.get("email"), "status": row.get("status", "unknown")}
     order = claimed[0]
     sent = False
+    lead = None
+    if order.get("lead_id"):
+        try:
+            lead = await get_lead(order["lead_id"])
+        except Exception as e:  # noqa: BLE001  (the bundle still goes out without the report)
+            print("Could not load the report for the bundle email:", repr(e))
     try:
         pdf = await fetch_guide()
-        sent = await asyncio.to_thread(send_guide_email, order["email"], order.get("name") or "there", pdf)
+        sent = await asyncio.to_thread(send_guide_email, order["email"], order.get("name") or "there", pdf, lead)
     except HTTPException as e:  # the PDF could not be loaded: marked failed, so a retry sends it later
         print("Guide delivery failed:", e.detail)
     finally:
@@ -774,7 +797,7 @@ async def deliver_guide(order_id: str, payment_id: str, source: str) -> dict:
         except Exception as e:  # noqa: BLE001
             print("Could not record the delivery:", repr(e))
     if not sent:
-        raise HTTPException(502, "Your payment went through, but the Guide email could not be sent. We will send it shortly.")
+        raise HTTPException(502, "Your payment went through, but the Erasmus Bundle email could not be sent. We will send it shortly.")
     return {"ok": True, "email": order["email"], "status": "delivered"}
 
 
@@ -782,10 +805,10 @@ async def deliver_guide(order_id: str, payment_id: str, source: str) -> dict:
 async def guide_order(request: Request, body: dict):
     rate_limit(request)
     if not rzp_ready():
-        raise HTTPException(503, "Payments are not open yet. Please book a free call meanwhile.")
+        raise HTTPException(503, "Payments are not open yet. Please try again soon.")
     email = _s(body.get("email"), 120).lower()
     if not EMAIL_RE.match(email):
-        raise HTTPException(400, "Please check your chances first, so we know where to send the Guide.")
+        raise HTTPException(400, "Please check your chances first, so we know where to send the Erasmus Bundle.")
     name = _s(body.get("name"), 80)
     whatsapp = _s(body.get("whatsapp"), 24)
     lead_id = None
