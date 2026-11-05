@@ -87,8 +87,6 @@ On GitHub open `backend/api/scoring_prompt.txt` -> pencil -> edit in plain Engli
 
 ## Before running ads
 - Test with at least 5 real students.
-- Replace the sample review texts under Archana, Layan and Anjana (and the second sentence under Amaresh) with their real words.
-- Check each programme's brand rules before using its logo in ads.
 - The "Launch offer, this week only" label and the live fact line must be true on the day you show them.
 - Real programme deadlines: Claude's dates can be wrong, so the page shows a deadline only when Claude gives one. For ads, keep a checked list of 2027 deadlines and use that instead.
 - Vercel Pro plan for ad traffic (longer time limits and more headroom).
