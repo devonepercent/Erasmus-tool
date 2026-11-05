@@ -68,6 +68,26 @@ When `API_URL` is filled in, the page hides two things that are sample content o
 
 Turn them on in `frontend/config.js` (`SHOW_LEADERBOARD:true`, `SHOW_LIVE_LINE:true`) only when they show real data. A leaderboard needs an opt-in tick box on the form first: until then no student is shown publicly.
 
+## Payments: the Guide through Razorpay
+"Buy the Guide" opens Razorpay's payment window for ₹499. The price is set on the server (`GUIDE_PRICE_PAISE`, default `49900`), never by the page. When the payment is confirmed, the server emails the Guide PDF, the same file as `/api/guide/send`. Every order is saved in the Supabase table `guide_orders`, and each order is emailed **once only**. "Get 1:1 Mentorship" (₹60,000) does not use Razorpay: it opens https://onepercentabroad.com/application/erasmus.
+
+Set up (start with **Test mode**, no real money):
+1. Supabase -> SQL Editor: run `backend/supabase.sql` again. It is safe to rerun. It adds the `guide_orders` and `guide_deliveries` tables.
+2. The Guide PDF must be in Supabase Storage (bucket `guides`, file `Erasmus_Mundus_2027_Guidebook_1pctAbroad.pdf`, or set `GUIDE_BUCKET` / `GUIDE_FILE`).
+3. Razorpay dashboard (switch to **Test Mode**) -> Account & Settings -> API Keys -> Generate. In the server project on Vercel add `RAZORPAY_KEY_ID` (starts `rzp_test_`) and `RAZORPAY_KEY_SECRET`.
+4. Razorpay -> Account & Settings -> Webhooks -> Add new webhook:
+   - URL: `https://erasmus-checker-api.vercel.app/api/razorpay/webhook`
+   - Secret: make up a long random text, and add the same text on Vercel as `RAZORPAY_WEBHOOK_SECRET`
+   - Active events: `payment.captured` and `order.paid`
+   This makes sure a student who pays and closes the tab still gets the Guide. Payments for anything else on the same Razorpay account are ignored.
+5. Redeploy the server, then open `/api/health?deep=1`: `razorpay_keys`, `razorpay_webhook`, `supabase_guide_orders_table` and `guide_pdf` should all say ok.
+6. Check your chances on the page with your own email -> Buy the Guide -> pay with a Razorpay test card or test UPI (`success@razorpay`). The Guide should arrive by email, and the order should show `delivered` in `guide_orders`.
+7. To go live: activate the Razorpay account (KYC), generate **Live** keys, add a live webhook the same way, swap the three values on Vercel and redeploy. No code change.
+
+If a Guide email fails after payment, the order is marked `failed`. Razorpay retries the webhook automatically and the Guide is sent on the retry. You can also send it by hand with `/api/guide/send`.
+
+Optional page settings in `frontend/config.js`: `MENTORSHIP_URL` changes where "Get 1:1 Mentorship" goes, and `BOOK_CALL_URL` changes where "Book a free call" goes.
+
 ## Changing the scoring
 On GitHub open `backend/api/scoring_prompt.txt` -> pencil -> edit in plain English -> Commit. Vercel redeploys in about a minute.
 

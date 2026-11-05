@@ -729,20 +729,21 @@ html.no-live-line .ticker{display:none!important}
         <li>An 8 step roadmap, key dates and a document checklist</li>
         <li>Price credited if you join mentorship later</li>
       </ul>
-      <button class="btn primary" onclick="toast('The Guide opens soon. Meanwhile, book a free call to get started.')">Buy the Guide</button>
+      <button class="btn primary" onclick="buyGuide(this)">Buy the Guide</button>
     </div>
 
     <div class="tier">
       <span class="badge">Most popular</span>
       <h3>1:1 Mentorship</h3>
-      <p class="price"><span class="blurprice">₹24,999</span> <span class="small" style="font-weight:400;font-family:Inter,sans-serif">Revealed on your call</span></p>
+      <p class="price">₹60,000</p>
       <ul>
         <li>A dedicated mentor from shortlist to interview</li>
         <li>SOP, references and documents reviewed line by line</li>
         <li>Applications to 3 programmes, managed together</li>
         <li>Our students: 30 to 40% success rate</li>
       </ul>
-      <button class="btn navy" onclick="bookCall()">Book a free call</button>
+      <button class="btn navy" onclick="mentorshipPage()">Get 1:1 Mentorship</button>
+      <button class="btn ghost" style="margin-top:10px" onclick="bookCall()">Book a free call first</button>
     </div>
 
     <button class="btn ghost" onclick="go('landing')">Back to start</button>
@@ -775,6 +776,25 @@ var CONFIG=window.CONFIG||{API_URL:"https://erasmus-checker-api.vercel.app"};
 (function(){var h=document.documentElement;if(CONFIG.API_URL){if(!CONFIG.SHOW_LEADERBOARD)h.classList.add('no-lb');if(!CONFIG.SHOW_LIVE_LINE)h.classList.add('no-live-line');if(CONFIG.SHOW_GUIDE===false||CONFIG.SHOW_GUIDE_BUNDLE===false)h.classList.add('no-guide')}})();
 /* 'Book a free call' opens the company's get-started page in a new tab (the utm tags tell your CRM the lead came from the checker) */
 function bookCall(){window.open(CONFIG.BOOK_CALL_URL||'https://onepercentabroad.com/get-started?utm_source=em_chance_checker&utm_medium=referral&utm_campaign=chance_checker','_blank','noopener')}
+/* 'Get 1:1 Mentorship' opens the company's Erasmus application page (utm tags as for the call link) */
+function mentorshipPage(){window.open(CONFIG.MENTORSHIP_URL||'https://onepercentabroad.com/application/erasmus?utm_source=em_chance_checker&utm_medium=referral&utm_campaign=chance_checker','_blank','noopener')}
+/* 'Buy the Guide': the server makes a Razorpay order (it sets the price), Razorpay's window takes the payment,
+   then the server checks the payment and emails the Guide. A webhook on the server covers a closed tab. */
+function loadRzp(){return new Promise(function(ok,no){if(window.Razorpay)return ok();var s=document.createElement('script');s.src='https://checkout.razorpay.com/v1/checkout.js';s.onload=ok;s.onerror=function(){no(new Error('Could not open the payment window. Check your connection and try again.'))};document.head.appendChild(s)})}
+function apiPost(path,body){return fetch(CONFIG.API_URL+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json().catch(function(){return {}}).then(function(j){if(!r.ok)throw new Error(typeof j.detail==='string'?j.detail:'Something went wrong. Please try again.');return j})})}
+function buyGuide(btn){
+  if(!CONFIG.API_URL){toast('Razorpay checkout opens here (sample page)');return}
+  var f=collectForm();
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email)){toast('Check your chances first, so we know where to send the Guide');go('form');return}
+  var label=btn.textContent;btn.disabled=true;btn.textContent='Opening payment…';
+  function reset(){btn.disabled=false;btn.textContent=label}
+  Promise.all([loadRzp(),apiPost('/api/guide/order',{name:f.name,email:f.email,whatsapp:f.whatsapp,lead_id:API?API.lead_id:null})]).then(function(res){var o=res[1];
+    var rz=new Razorpay({key:o.key_id,amount:o.amount,currency:o.currency,order_id:o.order_id,name:'1% Abroad',description:'The Erasmus Mundus Guide',
+      prefill:{name:f.name,email:f.email,contact:f.whatsapp},theme:{color:'#065dc7'},
+      handler:function(p){btn.textContent='Confirming payment…';apiPost('/api/guide/verify',p).then(function(j){reset();toast('Payment received. The Guide is on its way to '+(j.email||f.email))}).catch(function(e){reset();toast(e.message)})},
+      modal:{ondismiss:reset}});
+    rz.on('payment.failed',function(r){toast((r.error&&r.error.description)||'The payment did not go through. Please try again.')});
+    rz.open();}).catch(function(e){reset();toast(e.message)});}
 /* send people to the mentorship card on the offers page */
 function goMentorship(){go('offers');setTimeout(function(){var t=document.querySelector('#s-offers .tier:not(.feat)');if(t){t.scrollIntoView({behavior:'smooth',block:'center'});t.classList.add('pulse');setTimeout(function(){t.classList.remove('pulse')},1900)}},150)}
 var API=null; /* holds the real result from the backend */

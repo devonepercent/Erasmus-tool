@@ -7,6 +7,9 @@ One small server:
   GET  /api/leaderboard     last 7 days, only students who agreed to appear
   POST /api/report/email    re-send the report email for a lead
   GET  /api/share           share text + link for a lead
+  POST /api/guide/order     start a Razorpay payment for the Guide (price is set here, never by the page)
+  POST /api/guide/verify    the page reports a finished payment -> signature checked -> Guide emailed
+  POST /api/razorpay/webhook  Razorpay reports a payment -> signature checked -> Guide emailed (never twice)
 
 Settings come from environment variables (see .env.example).
 Run locally:   uvicorn api.index:app --reload --port 8000     (from the backend folder)
@@ -14,6 +17,7 @@ Run locally:   uvicorn api.index:app --reload --port 8000     (from the backend 
 
 import asyncio
 import base64
+import hashlib
 import hmac
 import io
 import json
@@ -47,7 +51,12 @@ EMAIL_REPLY_TO = os.environ.get("EMAIL_REPLY_TO", "")  # where student replies s
 # The paid Guide: a PDF kept in a PRIVATE Supabase Storage bucket, emailed to buyers as an attachment.
 GUIDE_BUCKET = os.environ.get("GUIDE_BUCKET", "guides")
 GUIDE_FILE = os.environ.get("GUIDE_FILE", "Erasmus_Mundus_2027_Guidebook_1pctAbroad.pdf")
-GUIDE_ADMIN_KEY = os.environ.get("GUIDE_ADMIN_KEY", "")  # secret needed to send the guide (team now, payment system later)
+GUIDE_ADMIN_KEY = os.environ.get("GUIDE_ADMIN_KEY", "")  # secret needed to send the guide by hand (team)
+# Razorpay: students pay for the Guide on the page, the Guide is emailed once the payment is confirmed.
+RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "")              # rzp_test_... while testing, rzp_live_... after
+RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "")
+RAZORPAY_WEBHOOK_SECRET = os.environ.get("RAZORPAY_WEBHOOK_SECRET", "")  # the secret you type when adding the webhook
+GUIDE_PRICE_PAISE = int(os.environ.get("GUIDE_PRICE_PAISE", "49900"))  # ₹499 (Razorpay counts in paise)
 BOOK_CALL_URL = os.environ.get("BOOK_CALL_URL", "https://onepercentabroad.com/get-started")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://onepercentabroad.com/chance")
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-5-5")
@@ -511,6 +520,8 @@ async def health(request: Request, deep: int = 0):
     else:
         settings.update({"RESEND_API_KEY": bool(RESEND_API_KEY), "EMAIL_FROM": bool(EMAIL_FROM)})
     settings["GUIDE_ADMIN_KEY"] = bool(GUIDE_ADMIN_KEY)
+    settings.update({"RAZORPAY_KEY_ID": bool(RAZORPAY_KEY_ID), "RAZORPAY_KEY_SECRET": bool(RAZORPAY_KEY_SECRET),
+                     "RAZORPAY_WEBHOOK_SECRET": bool(RAZORPAY_WEBHOOK_SECRET)})
     out = {"ok": True, "service": "EM Chance Checker API", "model": CLAUDE_MODEL, "email_service": service, "settings_filled_in": settings}
     if deep:
         rate_limit(request)
@@ -571,7 +582,22 @@ async def health(request: Request, deep: int = 0):
         else:
             checks["email"] = "problem: no email service set. Add RESEND_API_KEY and EMAIL_FROM"
         # The guide PDF: is it in the private bucket? (reads only its first bytes)
-        if GUIDE_ADMIN_KEY:
+        if RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET:
+            try:
+                async with httpx.AsyncClient(timeout=20) as client:
+                    r = await client.get(f"{RZP_API}/orders?count=1", auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+                checks["razorpay_keys"] = ("ok (test mode)" if RAZORPAY_KEY_ID.startswith("rzp_test_") else "ok") if r.status_code == 200 \
+                    else f"problem ({r.status_code}): check RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are a matching pair"
+            except Exception as e:  # noqa: BLE001
+                checks["razorpay_keys"] = f"problem: {e!r}"[:160]
+            if not RAZORPAY_WEBHOOK_SECRET:
+                checks["razorpay_webhook"] = "problem: add RAZORPAY_WEBHOOK_SECRET (Razorpay > Webhooks), so a student who closes the tab still gets the Guide"
+            try:
+                r = await db("GET", "guide_orders?select=order_id&limit=1")
+                checks["supabase_guide_orders_table"] = "ok" if r.status_code == 200 else f"problem ({r.status_code}): run supabase.sql again"
+            except Exception as e:  # noqa: BLE001
+                checks["supabase_guide_orders_table"] = f"problem: {e!r}"[:160]
+        if GUIDE_ADMIN_KEY or RAZORPAY_KEY_ID:
             try:
                 async with httpx.AsyncClient(timeout=20) as client:
                     r = await client.get(guide_url(), headers={**storage_headers(), "Range": "bytes=0-4"})
@@ -582,7 +608,7 @@ async def health(request: Request, deep: int = 0):
             except Exception as e:  # noqa: BLE001
                 checks["guide_pdf"] = f"problem: {e!r}"[:160]
         else:
-            checks["guide_pdf"] = "ok (guide sending not set up yet: add GUIDE_ADMIN_KEY)"
+            checks["guide_pdf"] = "ok (guide sending not set up yet: add GUIDE_ADMIN_KEY or the Razorpay keys)"
         out["checks"] = checks
         out["ok"] = all(str(v).startswith("ok") for v in checks.values())
     return out
@@ -690,6 +716,134 @@ async def guide_send(request: Request, body: dict, x_admin_key: Optional[str] = 
     if not sent:
         raise HTTPException(502, "The guide email could not be sent. Please try again.")
     return {"ok": True, "sent": True, "email": email}
+
+
+# ---------- Razorpay: paying for the Guide ----------
+RZP_API = "https://api.razorpay.com/v1"
+
+
+def rzp_ready() -> bool:
+    return bool(RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET)
+
+
+def rzp_sig_ok(message: bytes, secret: str, signature: str) -> bool:
+    expected = hmac.new(secret.encode(), message, hashlib.sha256).hexdigest()
+    return bool(signature) and hmac.compare_digest(expected, str(signature))
+
+
+async def rzp_get_order(order_id: str) -> dict:
+    async with httpx.AsyncClient(timeout=20) as client:
+        r = await client.get(f"{RZP_API}/orders/{quote(order_id)}", auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+    if r.status_code != 200:
+        raise HTTPException(502, "We could not confirm the payment with Razorpay. Please contact us.")
+    return r.json()
+
+
+async def deliver_guide(order_id: str, payment_id: str, source: str) -> dict:
+    """Email the Guide for a paid order. Safe to call many times: only the first call that
+    moves the order from 'created'/'failed' to 'sending' sends anything."""
+    r = await db("GET", f"guide_orders?order_id=eq.{quote(order_id)}&select=*")
+    rows = r.json() if r.status_code == 200 else []
+    if not rows:  # the order was made but not saved: rebuild the row from Razorpay's own copy
+        o = await rzp_get_order(order_id)
+        notes = o.get("notes") or {}
+        if notes.get("product") != "guide" or not EMAIL_RE.match(_s(notes.get("email"), 120)):
+            return {"ok": True, "ignored": "not a guide order"}  # another payment on the same Razorpay account
+        await db("POST", "guide_orders", json={"order_id": order_id, "email": _s(notes.get("email"), 120).lower(),
+                                               "name": _s(notes.get("name"), 80), "whatsapp": _s(notes.get("whatsapp"), 24),
+                                               "lead_id": notes.get("lead_id") or None, "amount": o.get("amount"), "status": "created"})
+    claim = await db("PATCH", f"guide_orders?order_id=eq.{quote(order_id)}&status=in.(created,failed)",
+                     json={"status": "sending", "payment_id": payment_id, "paid_at": datetime.now(timezone.utc).isoformat()})
+    claimed = claim.json() if claim.status_code == 200 else []
+    if not claimed:  # already sent, or being sent right now
+        cur = await db("GET", f"guide_orders?order_id=eq.{quote(order_id)}&select=email,status")
+        row = (cur.json() or [{}])[0] if cur.status_code == 200 else {}
+        return {"ok": True, "email": row.get("email"), "status": row.get("status", "unknown")}
+    order = claimed[0]
+    sent = False
+    try:
+        pdf = await fetch_guide()
+        sent = await asyncio.to_thread(send_guide_email, order["email"], order.get("name") or "there", pdf)
+    except HTTPException as e:  # the PDF could not be loaded: marked failed, so a retry sends it later
+        print("Guide delivery failed:", e.detail)
+    finally:
+        await db("PATCH", f"guide_orders?order_id=eq.{quote(order_id)}", json={"status": "delivered" if sent else "failed"})
+        try:
+            await db("POST", "guide_deliveries", json={"email": order["email"], "name": order.get("name"), "lead_id": order.get("lead_id"),
+                                                       "source": source, "sent": sent})
+        except Exception as e:  # noqa: BLE001
+            print("Could not record the delivery:", repr(e))
+    if not sent:
+        raise HTTPException(502, "Your payment went through, but the Guide email could not be sent. We will send it shortly.")
+    return {"ok": True, "email": order["email"], "status": "delivered"}
+
+
+@app.post("/api/guide/order")
+async def guide_order(request: Request, body: dict):
+    rate_limit(request)
+    if not rzp_ready():
+        raise HTTPException(503, "Payments are not open yet. Please book a free call meanwhile.")
+    email = _s(body.get("email"), 120).lower()
+    if not EMAIL_RE.match(email):
+        raise HTTPException(400, "Please check your chances first, so we know where to send the Guide.")
+    name = _s(body.get("name"), 80)
+    whatsapp = _s(body.get("whatsapp"), 24)
+    lead_id = None
+    if body.get("lead_id"):
+        try:
+            lead_id = str(uuid.UUID(str(body["lead_id"])))
+        except ValueError:
+            lead_id = None
+    notes = {"product": "guide", "email": email, "name": name, "whatsapp": whatsapp, "lead_id": lead_id or ""}
+    async with httpx.AsyncClient(timeout=20) as client:
+        r = await client.post(f"{RZP_API}/orders", auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET),
+                              json={"amount": GUIDE_PRICE_PAISE, "currency": "INR", "receipt": f"guide-{uuid.uuid4().hex[:20]}", "notes": notes})
+    if r.status_code != 200:
+        print("Razorpay order failed:", r.status_code, r.text[:300])
+        raise HTTPException(502, "We could not start the payment. Please try again in a minute.")
+    order = r.json()
+    try:
+        await db("POST", "guide_orders", json={"order_id": order["id"], "email": email, "name": name, "whatsapp": whatsapp,
+                                               "lead_id": lead_id, "amount": order["amount"], "status": "created"})
+    except Exception as e:  # noqa: BLE001  (delivery rebuilds the row from Razorpay if this fails)
+        print("Could not save the order:", repr(e))
+    return {"order_id": order["id"], "amount": order["amount"], "currency": order["currency"], "key_id": RAZORPAY_KEY_ID}
+
+
+@app.post("/api/guide/verify")
+async def guide_verify(request: Request, body: dict):
+    rate_limit(request)
+    if not rzp_ready():
+        raise HTTPException(503, "Payments are not set up.")
+    order_id = _s(body.get("razorpay_order_id"), 60)
+    payment_id = _s(body.get("razorpay_payment_id"), 60)
+    signature = _s(body.get("razorpay_signature"), 200)
+    if not (order_id and payment_id and rzp_sig_ok(f"{order_id}|{payment_id}".encode(), RAZORPAY_KEY_SECRET, signature)):
+        raise HTTPException(400, "We could not confirm this payment. If money was taken, contact us and we will sort it out.")
+    return await deliver_guide(order_id, payment_id, "razorpay")
+
+
+@app.post("/api/razorpay/webhook")
+async def razorpay_webhook(request: Request, x_razorpay_signature: Optional[str] = Header(None)):
+    if not RAZORPAY_WEBHOOK_SECRET:
+        raise HTTPException(503, "Webhook secret is not set.")
+    raw = await request.body()
+    if not rzp_sig_ok(raw, RAZORPAY_WEBHOOK_SECRET, x_razorpay_signature or ""):
+        raise HTTPException(400, "Bad signature.")
+    event = json.loads(raw or b"{}")
+    if event.get("event") not in ("payment.captured", "order.paid"):
+        return {"ok": True, "ignored": event.get("event")}
+    pay = ((event.get("payload") or {}).get("payment") or {}).get("entity") or {}
+    order_id = pay.get("order_id")
+    if not order_id:
+        return {"ok": True, "ignored": "payment without an order"}
+    try:
+        return await deliver_guide(order_id, pay.get("id", ""), "razorpay_webhook")
+    except HTTPException as e:
+        if e.status_code >= 500:  # could not send yet: Razorpay retries the webhook later
+            raise
+        print("Webhook delivery problem:", e.detail)
+        return {"ok": False, "detail": e.detail}
 
 
 @app.post("/api/report/email")
