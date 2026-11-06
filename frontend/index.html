@@ -539,7 +539,7 @@ html.no-live-line .ticker{display:none!important}
       <div class="step" data-step="1">
         <div class="q"><h3>Tell us about you</h3></div>
         <div class="stack" style="margin-top:4px">
-          <div class="field"><input placeholder="Your name" oninput="checkStep()"></div>
+          <div class="field"><input placeholder="Your name" maxlength="60" autocomplete="name" oninput="checkStep()"></div>
           <div class="field">
             <div class="wa-row">
               <select id="waCc" aria-label="Country code" onchange="waCheck(true)">
@@ -556,17 +556,17 @@ html.no-live-line .ticker{display:none!important}
             <option value="AU">🇦🇺 +61 Australia</option>
             <option value="OTHER">🌍 Other country</option>
               </select>
-              <input id="waNum" placeholder="WhatsApp number" inputmode="tel" autocomplete="tel-national" aria-describedby="waMsg" oninput="waCheck();checkStep()" onblur="waCheck(true)">
+              <input id="waNum" placeholder="WhatsApp number" inputmode="tel" autocomplete="tel-national" aria-describedby="waMsg" maxlength="20" oninput="onlyPhone(this);waCheck();checkStep()" onblur="waCheck(true)">
             </div>
             <p class="wa-msg" id="waMsg" aria-live="polite"></p>
           </div>
-          <div class="field"><input placeholder="Email" inputmode="email" oninput="checkStep()"></div>
+          <div class="field"><input id="emInput" placeholder="Email" inputmode="email" autocomplete="email" maxlength="120" aria-describedby="emMsg" oninput="this.value=this.value.replace(/\s/g,'');emailHint('');checkStep()" onblur="emailBlur(this)"><p class="wa-msg" id="emMsg" aria-live="polite"></p></div>
         </div>
       </div>
 
       <div class="step" data-step="2" style="display:none">
         <div class="q"><h3>Your CGPA or percentage</h3></div>
-        <div class="field"><input placeholder="e.g. 8.24 or 82%" inputmode="decimal" oninput="checkStep()"></div>
+        <div class="field"><input placeholder="e.g. 8.24 or 82" inputmode="decimal" maxlength="6" oninput="onlyCgpa(this);checkStep()"></div>
         <div class="q"><h3>Target intake</h3></div>
         <div class="chips one" onclick="pick(event)"><button class="chip">September 2027</button><button class="chip">September 2028</button><button class="chip">Not sure yet</button></div>
       </div>
@@ -964,9 +964,11 @@ function checkStep(){var cur=document.querySelector('#s-form .step[data-step="'+
   var n=document.getElementById('nextBtn');n.disabled=!ok;n.classList.toggle('ready',ok);}
 function stepError(msg,idx){var cur=document.querySelector('#s-form .step[data-step="'+step+'"]');var ins=cur.querySelectorAll('.field input');if(ins[idx]){ins[idx].classList.add('bad');ins[idx].focus()}toast(msg)}
 function stepValid(){var cur=document.querySelector('#s-form .step[data-step="'+step+'"]');var ins=cur.querySelectorAll('.field input');cur.querySelectorAll('.field input.bad').forEach(function(i){i.classList.remove('bad')});
-  if(step===1){var wv=waCheck(true);if(!wv.ok){stepError(wv.msg,1);return false}
-    if(ins[2]&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(ins[2].value.trim())){stepError('Please enter a valid email address',2);return false}}
-  if(step===2&&ins[0]){var v=parseFloat(String(ins[0].value).replace('%','').trim());if(!(v>0&&v<=100)){stepError('Please enter your CGPA or percentage as a number',0);return false}}
+  if(step===1){var nm=nameCheck(ins[0].value);if(nm){stepError(nm,0);return false}
+    var wv=waCheck(true);if(!wv.ok){stepError(wv.msg,1);return false}
+    var em=ins[2].value.trim().toLowerCase();if(!FORM_EMAIL_RE.test(em)){stepError('Please enter a valid email address, e.g. name@gmail.com',2);return false}
+    var sug=emailTypo(em);if(sug&&window._emailWarned!==em){window._emailWarned=em;emailHint(sug);stepError('Did you mean '+sug+'? Fix it, or tap Next again to keep it',2);return false}}
+  if(step===2&&ins[0]){if(!cgpaOk(ins[0].value)){stepError('Enter your CGPA out of 10 (e.g. 8.24) or a percentage from 35 to 100',0);return false}}
   return true}
 document.addEventListener('input',function(e){if(e.target&&e.target.classList&&e.target.classList.contains('bad'))e.target.classList.remove('bad')});
 function stepNext(){if(!stepValid())return;var last=hasCv?4:TOTAL;if(step<last){step++;if(step===5)prefillFromCv();showStep()}else{go('analysing')}}
@@ -1068,11 +1070,40 @@ var storyPage=function(){};
     if(m.offset!==drawn){tr.style.transform='translate3d('+(-m.offset)+'px,0,0)';drawn=m.offset}
     requestAnimationFrame(tick)}
   requestAnimationFrame(tick);})();
+/* Form checks. The server (backend/api/index.py, clean_profile) applies the same rules. */
+var FORM_EMAIL_RE=/^[a-z0-9_%+-]+(\.[a-z0-9_%+-]+)*@[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.[a-z]{2,}$/;
+function nameCheck(v){v=String(v||'').trim();if(/\d/.test(v))return 'Your name cannot contain numbers';
+  var letters=(v.match(/\p{L}/gu)||[]).length;if(letters<2||v.length>60)return 'Please enter your full name';return ''}
+function cgpaOk(v){var s=String(v||'').trim();if(!/^\d{1,3}(\.\d{1,2})?$/.test(s))return false;var n=parseFloat(s);
+  return (n>0&&n<=10)||(n>=35&&n<=100)}
+/* while typing: CGPA box takes digits and one dot only */
+function onlyCgpa(i){var v=i.value.replace(/[^\d.]/g,''),p=v.indexOf('.');if(p>-1)v=v.slice(0,p+1)+v.slice(p+1).replace(/\./g,'');if(v!==i.value)i.value=v}
+/* while typing: phone box takes digits and spaces; a leading + only when the country is "Other" */
+function onlyPhone(i){var other=document.getElementById('waCc').value==='OTHER',v=i.value;
+  var plus=other&&/^\s*\+/.test(v);v=v.replace(/[^\d ]/g,'');if(plus)v='+'+v.replace(/^\s+/,'');if(v!==i.value)i.value=v}
+/* email: no error while typing; checked once they leave the box */
+function emailBlur(i){var em=i.value.trim().toLowerCase(),el=document.getElementById('emMsg');if(!em||!el)return;
+  if(!FORM_EMAIL_RE.test(em)){el.className='wa-msg err';el.textContent='This does not look like a full email address, e.g. name@gmail.com';return}
+  var sug=emailTypo(em);if(sug){window._emailWarned=em;emailHint(sug);return}
+  el.className='wa-msg ok';el.textContent='✓ Looks right'}
+/* common email typos -> the domain they meant */
+var EMAIL_FIX={'gmial.com':'gmail.com','gmai.com':'gmail.com','gamil.com':'gmail.com','gnail.com':'gmail.com','gmaill.com':'gmail.com','gmail.co':'gmail.com','gmail.con':'gmail.com','gmail.cm':'gmail.com','gmail.om':'gmail.com','gmail.in':'gmail.com','gmal.com':'gmail.com','gmail.comm':'gmail.com',
+  'yahoo.co':'yahoo.com','yahoo.con':'yahoo.com','yaho.com':'yahoo.com','yahooo.com':'yahoo.com',
+  'hotmail.co':'hotmail.com','hotmail.con':'hotmail.com','hotmial.com':'hotmail.com','hotmal.com':'hotmail.com',
+  'outlook.co':'outlook.com','outlook.con':'outlook.com','outlok.com':'outlook.com','iclod.com':'icloud.com','icloud.co':'icloud.com','icloud.con':'icloud.com'};
+function emailTypo(em){var i=em.lastIndexOf('@');if(i<0)return '';var fix=EMAIL_FIX[em.slice(i+1)];return fix?em.slice(0,i+1)+fix:''}
+function emailHint(sug){var el=document.getElementById('emMsg');if(!el)return;
+  if(!sug){el.className='wa-msg';el.textContent='';return}
+  el.className='wa-msg err';el.innerHTML='Did you mean <b>'+esc(sug)+'</b>? <a href="#" onclick="useEmail(event)">Use this</a>';el.dataset.sug=sug}
+function useEmail(e){e.preventDefault();var el=document.getElementById('emMsg'),inp=document.getElementById('emInput');inp.value=el.dataset.sug||inp.value;inp.classList.remove('bad');emailHint('');checkStep()}
 /* WhatsApp number: per-country mobile rules, a tick when it looks right, and a link to check it on WhatsApp */
 var WA={"IN": {"dial": "91", "name": "India", "len": [10], "first": "6789", "adj": "Indian"}, "AE": {"dial": "971", "name": "UAE", "len": [9], "first": "5", "adj": "UAE"}, "SA": {"dial": "966", "name": "Saudi Arabia", "len": [9], "first": "5", "adj": "Saudi"}, "QA": {"dial": "974", "name": "Qatar", "len": [8], "first": "3567", "adj": "Qatari"}, "OM": {"dial": "968", "name": "Oman", "len": [8], "first": "79", "adj": "Omani"}, "KW": {"dial": "965", "name": "Kuwait", "len": [8], "first": "4569", "adj": "Kuwaiti"}, "BH": {"dial": "973", "name": "Bahrain", "len": [8], "first": "36", "adj": "Bahraini"}, "GB": {"dial": "44", "name": "UK", "len": [10], "first": "7", "adj": "UK"}, "US": {"dial": "1", "name": "USA", "len": [10], "first": "23456789", "adj": "US"}, "CA": {"dial": "1", "name": "Canada", "len": [10], "first": "23456789", "adj": "Canadian"}, "AU": {"dial": "61", "name": "Australia", "len": [9], "first": "4", "adj": "Australian"}};
 function waParse(){var cc=document.getElementById('waCc').value,raw=document.getElementById('waNum').value,d=raw.replace(/\D/g,'');
   if(cc==='OTHER'){if(/^\s*(\+|00)/.test(raw)&&d.indexOf('00')===0)d=d.slice(2);
-    var okO=/^\s*(\+|00)/.test(raw)&&d.length>=8&&d.length<=15;return {cc:cc,full:d,ok:okO,msg:okO?'':'Start with + and your country code, e.g. +49 1512 3456789'}}
+    var okO=/^\s*(\+|00)/.test(raw)&&d.length>=8&&d.length<=15,msgO=okO?'':'Start with + and your country code, e.g. +49 1512 3456789';
+    if(okO){var hit=null;Object.keys(WA).forEach(function(k){var dl=WA[k].dial;if(d.indexOf(dl)===0&&(!hit||dl.length>WA[hit].dial.length))hit=k});  /* a listed country code typed under Other: use its rule */
+      if(hit){var hc=WA[hit],hn=d.slice(hc.dial.length);if(hc.len.indexOf(hn.length)<0||hc.first.indexOf(hn.charAt(0))<0){okO=false;msgO='That is not a valid '+hc.adj+' mobile number. Pick '+hc.name+' from the list'}}}
+    return {cc:cc,full:d,ok:okO,msg:msgO}}
   var c=WA[cc];
   if(d.indexOf('00'+c.dial)===0)d=d.slice(2+c.dial.length);                      /* 00 + country code */
   else if(/^\s*\+/.test(raw)&&d.indexOf(c.dial)===0)d=d.slice(c.dial.length);   /* +country code typed again */

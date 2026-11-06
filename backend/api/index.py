@@ -127,7 +127,40 @@ def _num(v):
         return None
 
 
-EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")  # loose; kept for the Guide endpoints
+# The form's email check: plain ASCII local part, real-looking domain, 2+ letter ending. Same rule as the page.
+FORM_EMAIL_RE = re.compile(r"^[a-z0-9_%+-]+(\.[a-z0-9_%+-]+)*@[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.[a-z]{2,}$")
+CGPA_RE = re.compile(r"^\d{1,3}(\.\d{1,2})?\s*%?$")  # 8.24, 82, 82.5% - digits only
+
+# WhatsApp mobile rules, same as the page's country dropdown: dial code -> (national lengths, allowed first digits)
+WA_RULES = {
+    "91": ((10,), "6789"), "971": ((9,), "5"), "966": ((9,), "5"), "974": ((8,), "3567"), "968": ((8,), "79"),
+    "965": ((8,), "4569"), "973": ((8,), "36"), "44": ((10,), "7"), "1": ((10,), "23456789"), "61": ((9,), "4"),
+}
+
+
+def whatsapp_ok(v: str) -> bool:
+    """+<country code><number>. Listed countries get the per-country check; any other country 8 to 15 digits."""
+    if not re.fullmatch(r"\+[\d\s-]+", v or ""):
+        return False
+    d = re.sub(r"\D", "", v)
+    for dial in sorted(WA_RULES, key=len, reverse=True):
+        if d.startswith(dial):
+            lens, first = WA_RULES[dial]
+            nat = d[len(dial):]
+            return len(nat) in lens and nat[:1] in first
+    return 8 <= len(d) <= 15
+
+
+def cgpa_ok(raw) -> bool:
+    """CGPA out of 10 (above 0, up to 10) or a percentage from 35 to 100."""
+    s = str(raw or "").strip()
+    if not CGPA_RE.match(s):
+        return False
+    v = float(s.replace("%", ""))
+    return (0 < v <= 10 and "%" not in s) or 35 <= v <= 100
+
+
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
@@ -157,12 +190,16 @@ def clean_profile(raw: dict) -> dict:
     }
     if not p["name"]:
         raise HTTPException(400, "Please enter your name.")
-    if not EMAIL_RE.match(p["email"]):
+    if re.search(r"\d", p["name"]):
+        raise HTTPException(400, "Your name cannot contain numbers.")
+    if len(p["name"]) > 60 or sum(c.isalpha() for c in p["name"]) < 2:
+        raise HTTPException(400, "Please enter your full name.")
+    if not FORM_EMAIL_RE.match(p["email"]):
         raise HTTPException(400, "Please enter a valid email address.")
-    if not 7 <= len(re.sub(r"\D", "", p["whatsapp"])) <= 15:  # international numbers have at most 15 digits
-        raise HTTPException(400, "Please enter a valid WhatsApp number.")
-    if p["cgpa"] is None or not (0 < p["cgpa"] <= 100):
-        raise HTTPException(400, "Please enter your CGPA or percentage as a number.")
+    if not whatsapp_ok(p["whatsapp"]):
+        raise HTTPException(400, "Please enter a valid WhatsApp number with your country code.")
+    if not cgpa_ok(raw.get("cgpa")):
+        raise HTTPException(400, "Please enter your CGPA out of 10 (e.g. 8.24) or a percentage from 35 to 100.")
     if not p["programmes"]:
         raise HTTPException(400, "Please choose at least one programme.")
     return p
