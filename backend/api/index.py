@@ -159,7 +159,7 @@ def clean_profile(raw: dict) -> dict:
         raise HTTPException(400, "Please enter your name.")
     if not EMAIL_RE.match(p["email"]):
         raise HTTPException(400, "Please enter a valid email address.")
-    if len(re.sub(r"\D", "", p["whatsapp"])) < 7:
+    if not 7 <= len(re.sub(r"\D", "", p["whatsapp"])) <= 15:  # international numbers have at most 15 digits
         raise HTTPException(400, "Please enter a valid WhatsApp number.")
     if p["cgpa"] is None or not (0 < p["cgpa"] <= 100):
         raise HTTPException(400, "Please enter your CGPA or percentage as a number.")
