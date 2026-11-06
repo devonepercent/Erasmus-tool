@@ -132,7 +132,7 @@ EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")  # loose; kept for the Guid
 FORM_EMAIL_RE = re.compile(r"^[a-z0-9_%+-]+(\.[a-z0-9_%+-]+)*@[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.[a-z]{2,}$")
 CGPA_RE = re.compile(r"^\d{1,3}(\.\d{1,2})?\s*%?$")  # 8.24, 82, 82.5% - digits only
 
-# WhatsApp mobile rules, same as the page's country dropdown: dial code -> (national lengths, allowed first digits)
+# WhatsApp number lengths, same as the page's country dropdown: dial code -> (national lengths, first digits - not checked)
 WA_RULES = {
     "91": ((10,), "6789"), "971": ((9,), "5"), "966": ((9,), "5"), "974": ((8,), "3567"), "968": ((8,), "79"),
     "965": ((8,), "4569"), "973": ((8,), "36"), "44": ((10,), "7"), "1": ((10,), "23456789"), "61": ((9,), "4"),
@@ -148,7 +148,7 @@ def whatsapp_ok(v: str) -> bool:
         if d.startswith(dial):
             lens, first = WA_RULES[dial]
             nat = d[len(dial):]
-            return len(nat) in lens and nat[:1] in first
+            return len(nat) in lens  # length only: first digits vary (e.g. some Indian numbers start with 2 or 3)
     return 8 <= len(d) <= 15
 
 
