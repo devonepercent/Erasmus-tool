@@ -539,7 +539,7 @@ html.no-live-line .ticker{display:none!important}
       <div class="step" data-step="1">
         <div class="q"><h3>Tell us about you</h3></div>
         <div class="stack" style="margin-top:4px">
-          <div class="field"><input placeholder="Your name" maxlength="60" autocomplete="name" oninput="checkStep()"></div>
+          <div class="field"><input placeholder="Your name" maxlength="60" autocomplete="name" data-live="1" aria-describedby="nmMsg" oninput="nameLive(this);checkStep()" onblur="nameLive(this,true)"><p class="wa-msg" id="nmMsg" aria-live="polite"></p></div>
           <div class="field">
             <div class="wa-row">
               <select id="waCc" aria-label="Country code" onchange="waCheck(true)">
@@ -556,17 +556,17 @@ html.no-live-line .ticker{display:none!important}
             <option value="AU">🇦🇺 +61 Australia</option>
             <option value="OTHER">🌍 Other country</option>
               </select>
-              <input id="waNum" placeholder="WhatsApp number" inputmode="tel" autocomplete="tel-national" aria-describedby="waMsg" maxlength="20" oninput="onlyPhone(this);waCheck();checkStep()" onblur="waCheck(true)">
+              <input id="waNum" placeholder="WhatsApp number" inputmode="tel" autocomplete="tel-national" aria-describedby="waMsg" maxlength="20" data-live="1" oninput="onlyPhone(this);waCheck();checkStep()" onblur="waCheck(true)">
             </div>
             <p class="wa-msg" id="waMsg" aria-live="polite"></p>
           </div>
-          <div class="field"><input id="emInput" placeholder="Email" inputmode="email" autocomplete="email" maxlength="120" aria-describedby="emMsg" oninput="this.value=this.value.replace(/\s/g,'');emailHint('');checkStep()" onblur="emailBlur(this)"><p class="wa-msg" id="emMsg" aria-live="polite"></p></div>
+          <div class="field"><input id="emInput" placeholder="Email" inputmode="email" autocomplete="email" maxlength="120" aria-describedby="emMsg" data-live="1" oninput="this.value=this.value.replace(/\s/g,'');emailHint('');emailLive(this);checkStep()" onblur="emailBlur(this)"><p class="wa-msg" id="emMsg" aria-live="polite"></p></div>
         </div>
       </div>
 
       <div class="step" data-step="2" style="display:none">
         <div class="q"><h3>Your CGPA or percentage</h3></div>
-        <div class="field"><input placeholder="e.g. 8.24 or 82" inputmode="decimal" maxlength="6" oninput="onlyCgpa(this);checkStep()"></div>
+        <div class="field"><input placeholder="e.g. 8.24 or 82" inputmode="decimal" maxlength="6" data-live="1" aria-describedby="cgMsg" oninput="onlyCgpa(this);cgpaLive(this);checkStep()" onblur="cgpaLive(this,true)"><p class="wa-msg" id="cgMsg" aria-live="polite"></p></div>
         <div class="q"><h3>Target intake</h3></div>
         <div class="chips one" onclick="pick(event)"><button class="chip">September 2027</button><button class="chip">September 2028</button><button class="chip">Not sure yet</button></div>
       </div>
@@ -970,7 +970,7 @@ function stepValid(){var cur=document.querySelector('#s-form .step[data-step="'+
     var sug=emailTypo(em);if(sug&&window._emailWarned!==em){window._emailWarned=em;emailHint(sug);stepError('Did you mean '+sug+'? Fix it, or tap Next again to keep it',2);return false}}
   if(step===2&&ins[0]){if(!cgpaOk(ins[0].value)){stepError('Enter your CGPA out of 10 (e.g. 8.24) or a percentage from 35 to 100',0);return false}}
   return true}
-document.addEventListener('input',function(e){if(e.target&&e.target.classList&&e.target.classList.contains('bad'))e.target.classList.remove('bad')});
+document.addEventListener('input',function(e){if(e.target&&e.target.classList&&e.target.classList.contains('bad')&&!(e.target.dataset&&e.target.dataset.live))e.target.classList.remove('bad')});
 function stepNext(){if(!stepValid())return;var last=hasCv?4:TOTAL;if(step<last){step++;if(step===5)prefillFromCv();showStep()}else{go('analysing')}}
 function stepBack(){if(step>1){step--;showStep()}else{go('landing')}}
 function runAnalysis(){var items=document.querySelectorAll('#steps li');items.forEach(function(li){li.classList.remove('done')});
@@ -1082,10 +1082,29 @@ function onlyCgpa(i){var v=i.value.replace(/[^\d.]/g,''),p=v.indexOf('.');if(p>-
 function onlyPhone(i){var other=document.getElementById('waCc').value==='OTHER',v=i.value;
   var plus=other&&/^\s*\+/.test(v);v=v.replace(/[^\d ]/g,'');if(plus)v='+'+v.replace(/^\s+/,'');if(v!==i.value)i.value=v}
 /* email: no error while typing; checked once they leave the box */
-function emailBlur(i){var em=i.value.trim().toLowerCase(),el=document.getElementById('emMsg');if(!em||!el)return;
-  if(!FORM_EMAIL_RE.test(em)){el.className='wa-msg err';el.textContent='This does not look like a full email address, e.g. name@gmail.com';return}
+function emailBlur(i){var em=i.value.trim().toLowerCase();if(!em)return;
+  var live=emailLiveMsg(em);if(live){fieldMsg('emMsg',i,live);return}
+  if(!FORM_EMAIL_RE.test(em)){fieldMsg('emMsg',i,'This does not look like a full email address, e.g. name@gmail.com');return}
   var sug=emailTypo(em);if(sug){window._emailWarned=em;emailHint(sug);return}
-  el.className='wa-msg ok';el.textContent='✓ Looks right'}
+  fieldMsg('emMsg',i,'','✓ Looks right')}
+/* live warnings: shown right under the box while the student types */
+function fieldMsg(id,inp,msg,ok){var el=document.getElementById(id);if(!el)return;el.className='wa-msg'+(msg?' err':ok?' ok':'');el.textContent=msg||ok||'';if(inp)inp.classList.toggle('bad',!!msg)}
+function nameLive(i,strict){var v=i.value.trim();
+  if(/\d/.test(v))return fieldMsg('nmMsg',i,'Names cannot contain numbers');
+  if(strict&&v&&nameCheck(v))return fieldMsg('nmMsg',i,nameCheck(v));
+  fieldMsg('nmMsg',i,'')}
+function emailLiveMsg(v){var bad=v.match(/[^a-zA-Z0-9@._%+-]/);
+  if(bad)return 'Emails cannot contain "'+bad[0]+'"';
+  if((v.match(/@/g)||[]).length>1)return 'An email has only one @';
+  if(/\.\./.test(v))return 'Two dots in a row are not allowed';
+  if(/^[.@]/.test(v))return 'An email cannot start with "'+v.charAt(0)+'"';return ''}
+function emailLive(i){fieldMsg('emMsg',i,emailLiveMsg(i.value.trim()))}
+function cgpaLive(i,strict){var s=i.value.trim(),n=parseFloat(s),RANGE='Enter your CGPA out of 10 (e.g. 8.24) or a percentage from 35 to 100';
+  if(!s)return fieldMsg('cgMsg',i,'');
+  if(/\.\d{3,}$/.test(s))return fieldMsg('cgMsg',i,'Use at most 2 decimals, e.g. 8.24');
+  if((n>10&&n<35)||n>100)return fieldMsg('cgMsg',i,RANGE);   /* can never become valid by typing more */
+  if(cgpaOk(s))return fieldMsg('cgMsg',i,'','✓ '+(n<=10?'CGPA '+s+' out of 10':s+'%'));
+  fieldMsg('cgMsg',i,strict?RANGE:'')}
 /* common email typos -> the domain they meant */
 var EMAIL_FIX={'gmial.com':'gmail.com','gmai.com':'gmail.com','gamil.com':'gmail.com','gnail.com':'gmail.com','gmaill.com':'gmail.com','gmail.co':'gmail.com','gmail.con':'gmail.com','gmail.cm':'gmail.com','gmail.om':'gmail.com','gmail.in':'gmail.com','gmal.com':'gmail.com','gmail.comm':'gmail.com',
   'yahoo.co':'yahoo.com','yahoo.con':'yahoo.com','yaho.com':'yahoo.com','yahooo.com':'yahoo.com',
@@ -1116,8 +1135,8 @@ function waParse(){var cc=document.getElementById('waCc').value,raw=document.get
 function waE164(){var p=waParse();if(!p.ok)return '';return p.cc==='OTHER'?'+'+p.full:'+'+WA[p.cc].dial+' '+p.national}
 function waCheck(strict){var p=waParse(),el=document.getElementById('waMsg'),inp=document.getElementById('waNum');if(!el)return p;
   if(p.ok){el.className='wa-msg ok';el.innerHTML='✓ Looks right: '+esc(waE164())+'<a href="https://wa.me/'+p.full+'" target="_blank" rel="noopener">Check on WhatsApp ↗</a>';inp.classList.remove('bad')}
-  else if(strict&&inp.value.trim()){el.className='wa-msg err';el.textContent=p.msg;inp.classList.add('bad')}
-  else{el.className='wa-msg';el.textContent='';}
+  else if(inp.value.trim()&&(strict||!/^(Too short|Enter your)/.test(p.msg))){el.className='wa-msg err';el.textContent=p.msg;inp.classList.add('bad')}
+  else{el.className='wa-msg';el.textContent='';inp.classList.remove('bad')}
   return p}
 /* open at hash */
 var h=(location.hash||'').replace('#','');if(SCREENS.indexOf(h)>-1&&h!=='analysing')go(h);
