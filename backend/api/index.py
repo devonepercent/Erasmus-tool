@@ -316,11 +316,23 @@ async def ask_claude(profile: dict, cv_text: str) -> dict:
     raise HTTPException(503, "Our scoring service is busy right now. Please try again in a minute.")
 
 
+CURVE_TOP = 80      # scores at or above this are left as they are
+CURVE_PULL = 0.2    # below it, pull down by 20% of the distance to CURVE_TOP
+
+
+def _curve(pct: int) -> int:
+    """Lower weak and average chances more than strong ones, so a weak CV doesn't look promising.
+    25 -> 14, 40 -> 32, 55 -> 50, 70 -> 68, 80+ unchanged."""
+    if pct >= CURVE_TOP:
+        return pct
+    return max(2, pct - int(round((CURVE_TOP - pct) * CURVE_PULL)))
+
+
 def normalise(r: dict) -> dict:
     """Make sure the page always gets exactly the shape it expects, whatever Claude returned."""
-    adm = _int(r.get("admission_pct"), 3, 95, 30)
-    sch = min(adm, _int(r.get("scholarship_pct"), 2, 90, max(3, adm - 15)))
-    uplift = _int(r.get("uplift_pct"), 1, 95, adm + 10)
+    adm = _curve(_int(r.get("admission_pct"), 3, 95, 30))
+    sch = min(adm, _curve(_int(r.get("scholarship_pct"), 2, 90, max(3, adm - 15))))
+    uplift = _curve(_int(r.get("uplift_pct"), 1, 95, adm + 10))
     if uplift <= adm:
         uplift = min(95, adm + 8)
 
@@ -341,7 +353,7 @@ def normalise(r: dict) -> dict:
     for i, p in enumerate((r.get("programmes") or [])[:5]):
         if isinstance(p, dict) and _s(p.get("name"), 120):
             d = _s(p.get("deadline"), 10)
-            progs.append({"name": _s(p.get("name"), 120), "deadline": d if DATE_RE.match(d) else "", "pct": _int(p.get("pct"), 1, 95, adm), "locked": False})
+            progs.append({"name": _s(p.get("name"), 120), "deadline": d if DATE_RE.match(d) else "", "pct": _curve(_int(p.get("pct"), 1, 95, adm)), "locked": False})
     while len(progs) < 5:
         progs.append({"name": "More matches with your mentor", "deadline": "", "pct": adm, "locked": False})
     for i, p in enumerate(progs):
