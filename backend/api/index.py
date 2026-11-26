@@ -316,16 +316,21 @@ async def ask_claude(profile: dict, cv_text: str) -> dict:
     raise HTTPException(503, "Our scoring service is busy right now. Please try again in a minute.")
 
 
-CURVE_TOP = 80      # scores at or above this are left as they are
-CURVE_PULL = 0.2    # below it, pull down by 20% of the distance to CURVE_TOP
+CURVE_MID_IN = 63    # a raw 63 (shown as 60 before this change) ...
+CURVE_MID_OUT = 50   # ... is now shown as 50
+CURVE_TOP = 92       # the top of the scale is left as it is
 
 
 def _curve(pct: int) -> int:
-    """Lower weak and average chances more than strong ones, so a weak CV doesn't look promising.
-    25 -> 14, 40 -> 32, 55 -> 50, 70 -> 68, 80+ unchanged."""
+    """Lower the chance so a weak or average CV doesn't look promising.
+    Below the middle point scores scale down evenly; above it they climb back to the top.
+    25 -> 20, 40 -> 32, 55 -> 44, 63 -> 50, 70 -> 60, 80 -> 75, 92+ unchanged."""
     if pct >= CURVE_TOP:
         return pct
-    return max(2, pct - int(round((CURVE_TOP - pct) * CURVE_PULL)))
+    if pct <= CURVE_MID_IN:
+        return max(2, int(round(pct * CURVE_MID_OUT / CURVE_MID_IN)))
+    slope = (CURVE_TOP - CURVE_MID_OUT) / (CURVE_TOP - CURVE_MID_IN)
+    return int(round(CURVE_MID_OUT + (pct - CURVE_MID_IN) * slope))
 
 
 def normalise(r: dict) -> dict:
